@@ -1,0 +1,66 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "OpenContract",
+  "favicon": "/favicon.svg",
+  "logo": {
+    "light": "/logo/OpenContract Trademark.svg",
+    "dark": "/logo/OpenContract Trademark night.svg"
+  },
+  "colors": {
+    "primary": "#0052FF",
+    "light": "#3375FF",
+    "dark": "#0040CC"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Getting Started",
+        "pages": [
+          "introduction",
+          "opencontract-101",
+          "quickstart"
+        ]
+      },
+      {
+        "group": "Core Concepts",
+        "pages": [
+          "core-concepts/parties_roles",
+          "core-concepts/consensus"
+        ]
+      },
+      {
+        "group": "API Reference",
+        "pages": [
+          "api-reference/overview",
+          {
+            "group": "Contracts",
+            "pages": [
+              "api-reference/contracts/create",
+              "api-reference/contracts/list",
+              "api-reference/contracts/get"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Get Started",
+      "href": "https://github.com"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com"
+    }
+  }
+}

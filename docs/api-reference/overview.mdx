@@ -1,0 +1,71 @@
+---
+title: API Overview
+description: Base URL, authentication, errors, and versioning for the OpenContract API.
+---
+
+## Base URL
+
+```
+https://api.opencontract.io/v1
+```
+
+## Authentication
+
+Include your API key as a bearer token in every request:
+
+```bash
+curl https://api.opencontract.io/v1/contracts \
+  -H "Authorization: Bearer <YOUR_API_KEY>"
+```
+
+## Request Format
+
+All request bodies must be JSON. Set the `Content-Type` header accordingly:
+
+```
+Content-Type: application/json
+```
+
+## Response Format
+
+All responses return JSON with a consistent envelope:
+
+```json
+{
+  "data": { ... },
+  "meta": {
+    "requestId": "req_abc123",
+    "timestamp": "2026-06-02T00:00:00Z"
+  }
+}
+```
+
+## Error Codes
+
+| Status | Code | Description |
+|--------|------|-------------|
+| 400 | `invalid_request` | Missing or malformed parameters |
+| 401 | `unauthorized` | Invalid or missing API key |
+| 404 | `not_found` | Resource does not exist |
+| 409 | `conflict` | Bid too low or auction already ended |
+| 429 | `rate_limited` | Too many requests |
+| 500 | `internal_error` | Server-side error |
+
+Error responses follow this shape:
+
+```json
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "reservePrice must be a positive number"
+  }
+}
+```
+
+## Rate Limits
+
+| Plan | Requests / minute |
+|------|------------------|
+| Free | 60 |
+| Pro  | 600 |
+| Enterprise | Unlimited |
