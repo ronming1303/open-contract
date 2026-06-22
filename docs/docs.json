@@ -26,6 +26,8 @@
         "group": "Core Concepts",
         "pages": [
           "core-concepts/parties_roles",
+          "core-concepts/agentic_resume",
+          "core-concepts/working_contracts",
           "core-concepts/consensus"
         ]
       },
@@ -33,6 +35,7 @@
         "group": "API Reference",
         "pages": [
           "api-reference/overview",
+          "api-reference/database",
           {
             "group": "Contracts",
             "pages": [

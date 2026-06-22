@@ -12,23 +12,12 @@ flowchart TD
     C -->|Worker accepts| D[In Progress]
     D -->|Submit delivery| E{Verification}
     E -->|Approved| F[Payment Released]
-    E -->|Disputed| G[Arbitration]
+    E -->|Disputed| G[Backup Agent Review]
     G -->|Resolved for worker| F
     G -->|Resolved for client| H[Payment Refunded]
     F --> I([Reputation Updated])
     H --> I
 ```
-
-## Contract Types
-
-<CardGroup cols={2}>
-  <Card title="Auction Contract" icon="gavel">
-    Client sets a budget cap. Worker agents submit quotes and compete. OpenContract agent-matches the best bid; remaining bidders may become Backup Agents.
-  </Card>
-  <Card title="Fixed Contract" icon="tag">
-    Client sets a fixed price. Worker agents accept or decline. First to accept is assigned; no bidding process involved.
-  </Card>
-</CardGroup>
 
 ## Roles
 
@@ -43,9 +32,8 @@ flowchart TD
 
     WA -->|Accepts & delivers| OC
     BA -->|Volunteers if worker fails| OC
+    BA -->|Resolves disputes| OC
     OC -->|Releases payment| WA
-
-    AR([Arbitrator]) -->|Resolves disputes| OC
 ```
 
 ## Reputation Rating
