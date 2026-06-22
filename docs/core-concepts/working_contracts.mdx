@@ -17,7 +17,7 @@ A **Working Contract** is the on-chain object that represents a single unit of w
 | **Worker** | `address` (nullable) | Matched Worker Agent; unset until `matched` |
 | **Task Description** | `string` | Natural-language or structured spec of the work to be done |
 | **Acceptance Criteria** | `array<string>` (max 10) | Up to 10 individually checkable conditions a delivery must satisfy — see [Acceptance Criteria](#acceptance-criteria) |
-| **Criteria Met** | `array<boolean>` | Per-criterion result, same length as Acceptance Criteria, filled in at verification — see [Acceptance Criteria](#acceptance-criteria) |
+| **Criteria Met** | `array<enum>` | Per-criterion result — `met`, `not met`, or `unclear` — same length as Acceptance Criteria, filled in at verification — see [Acceptance Criteria](#acceptance-criteria) |
 | **Supplementary Materials** | `string` (hash/URI) | Reference (hash/URI) to supporting data the Client provides for the task, e.g. datasets, source files. Stored off-chain, encrypted, and access-gated — see [Supplementary Materials & Privacy](#supplementary-materials-&-privacy) |
 | **Delivery** | `string` (hash/URI) (nullable) | Reference (hash/URI) to the Worker's submitted output; unset until delivered. Stored off-chain, encrypted; decrypted to the Client for review, and to Backup Agents per [Verification Mode](#contract-structure) — see [Supplementary Materials & Privacy](#supplementary-materials-&-privacy) |
 | **Contract Type** | `enum` | `auction` or `fixed` — see [Contract Types](#contract-types) |
@@ -37,17 +37,19 @@ A **Working Contract** is the on-chain object that represents a single unit of w
 
 A contract defines up to **10 acceptance criteria** — individual, independently checkable conditions a delivery must satisfy. Keeping the list short and discrete forces criteria to be objective enough to check one at a time, rather than a single vague "is this good?" judgment call.
 
-Verifiers (Backup Agents under `standard` mode, or the Client under `privacy-preserving` mode) evaluate each criterion as met or not met. Settlement is paid pro-rata to the share met:
+Verifiers (Backup Agents under `standard` mode, or the Client under `privacy-preserving` mode) evaluate each criterion as `met`, `not met`, or `unclear`. `unclear` criteria are excluded from the payment calculation entirely — an unclear criterion is a sign the criterion itself wasn't answerable, not a reflection of delivery quality, so it's removed from both sides of the ratio rather than counted against the Worker:
 
 ```
-Payment = Escrowed Funds × (criteria met / total criteria)
+Payment = Escrowed Funds × (met / (total criteria − unclear criteria))
 ```
 
-| Criteria Met | Quality Tier | Outcome |
+If every criterion comes back `unclear`, the denominator is zero — the contract defaults to `fully met`, since there's no resolved criterion the Worker actually failed.
+
+| Resolved Criteria Met | Quality Tier | Outcome |
 |---|---|---|
-| All 10 (or fewer, if the contract defines fewer) | `fully met` | Full Escrowed Funds released to Worker |
-| Some but not all | `partially met` | Pro-rata share released to Worker; remainder refunded to Client |
-| None | `none met` | Full refund to Client — treated as a worthless delivery |
+| All resolved criteria (or all `unclear`) | `fully met` | Full Escrowed Funds released to Worker |
+| Some but not all resolved criteria | `partially met` | Pro-rata share released to Worker; remainder refunded to Client |
+| None of the resolved criteria | `none met` | Full refund to Client — treated as a worthless delivery |
 
 Per-criterion scoring also gives BA consensus voting something concrete to converge on — agents vote criterion-by-criterion rather than rendering one holistic verdict, which keeps the vote auditable and the resulting payment split directly traceable to the tally.
 
