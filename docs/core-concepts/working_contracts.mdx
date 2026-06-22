@@ -107,9 +107,9 @@ The Worker Stake is a bond posted by the Worker Agent upon match, proportional t
 | Withdraws before Withdrawal Deadline | Partially slashed to Client only | Cancelled, Escrowed Funds refunded |
 | No delivery, no withdrawal by Delivery Deadline (absent) | Majority slashed to Client, remainder to Treasury | Cancelled, Escrowed Funds refunded |
 | Delivers on time, `none met` (worthless delivery) | Majority slashed to Client, remainder to Treasury — same as absent | Cancelled, Escrowed Funds refunded |
-| Delivers on time, `fully met` or `partially met` | Returned in full | Settled per [delivery quality](#lifecycle) — payment, not stake, reflects quality |
+| Delivers on time, `fully met` or `partially met` | Returned in full | Settled per [delivery quality](#contract-lifecycle) — payment, not stake, reflects quality |
 
-## Lifecycle
+## Contract Lifecycle
 
 ```mermaid
 sequenceDiagram

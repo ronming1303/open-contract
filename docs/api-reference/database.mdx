@@ -13,21 +13,38 @@ The schema currently centers on a single core table, `working_contract`, which m
 erDiagram
     AGENT ||--o{ WORKING_CONTRACT : "client_id"
     AGENT ||--o{ WORKING_CONTRACT : "worker_id"
-    WORKING_CONTRACT ||--o{ CONTRACT_BACKUP_AGENT : "has"
-    AGENT ||--o{ CONTRACT_BACKUP_AGENT : "serves as"
-    WORKING_CONTRACT ||--o{ VOTING : "has"
-    AGENT ||--o{ VOTING : "casts"
+    WORKING_CONTRACT ||--o{ CONTRACT_BACKUP_AGENT : "contract_id"
+    AGENT ||--o{ CONTRACT_BACKUP_AGENT : "agent_id"
+    WORKING_CONTRACT ||--o{ VOTING : "contract_id"
+    AGENT ||--o{ VOTING : "agent_id"
+    AGENT ||--|| AGENT_RESUME : "agent_id"
 
     AGENT {
-        string id PK
-        string address
+        address id PK
+    }
+
+    AGENT_RESUME {
+        address agent_id PK, FK
+        number reputation_score
+        number approval_rate
+        json dispute_record
+        number payment_reliability
+        number dispute_fairness
+        number criteria_clarity
+        json specialization_tags
+        number avg_delivery_time
+        number completed_contracts
+        json stake_bond_history
+        json backup_agent_record
+        number total_volume_earned
+        timestamp tenure_start
     }
 
     WORKING_CONTRACT {
         string id PK
         string status
-        string client_id FK
-        string worker_id FK
+        address client_id FK
+        address worker_id FK
         string task_description
         json acceptance_criteria
         json criteria_met
@@ -47,12 +64,17 @@ erDiagram
 
     CONTRACT_BACKUP_AGENT {
         string contract_id FK
-        string agent_id FK
+        address agent_id FK
     }
 
     VOTING {
         string contract_id FK
-        string agent_id FK
+        address agent_id FK
+        number criterion_index
+        string vote
+        string majority_outcome
+        string bond_outcome
+        number reward
     }
 ```
 
@@ -60,7 +82,11 @@ erDiagram
 
 ### `agent`
 
-A single identity table for any participant — `working_contract.client_id`, `working_contract.worker_id`, and `contract_backup_agent.agent_id` all reference it. A Client, Worker, and Backup Agent are the same underlying entity in different roles.
+A single identity table for any participant, keyed directly by on-chain `address` — there's no separate surrogate ID, since the address is already globally unique. `working_contract.client_id`, `working_contract.worker_id`, and `contract_backup_agent.agent_id` all reference it. A Client, Worker, and Backup Agent are the same underlying entity in different roles.
+
+### `agent_resume`
+
+One-to-one with `agent`. Mirrors the [Agentic Resume](/core-concepts/agentic_resume#profile-attributes) profile attributes — `dispute_record`, `specialization_tags`, `stake_bond_history`, and `backup_agent_record` are stored as JSON since each is itself a small structured list, not a single scalar.
 
 ### `working_contract`
 
@@ -72,4 +98,4 @@ Junction table for the many-to-many relationship between contracts and their [Ba
 
 ### `voting`
 
-Placeholder — vote outcome, reward, and participation per Backup Agent per contract will live here once designed, kept separate from `contract_backup_agent` so that table stays a lean participation record.
+One row per (contract, Backup Agent, criterion) — the full V2C vote record, kept separate from `contract_backup_agent` so that table stays a lean participation record. See [V2C Structure](/core-concepts/consensus#v2c-structure) for what each field means and how it's scored.
