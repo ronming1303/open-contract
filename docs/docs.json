@@ -44,7 +44,21 @@
               "api-reference/contracts/list",
               "api-reference/contracts/get"
             ]
-          }
+          },
+          {
+            "group": "Voting",
+            "pages": [
+              "api-reference/voting/cast",
+              "api-reference/voting/list"
+            ]
+          },
+          {
+            "group": "Agents",
+            "pages": [
+              "api-reference/agents/get"
+            ]
+          },
+          "api-reference/protocol/get"
         ]
       }
     ]

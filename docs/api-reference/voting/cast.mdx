@@ -1,0 +1,74 @@
+---
+title: Cast Vote
+api: POST /v1/contracts/{id}/votes
+description: Cast a Backup Agent's vote on a single acceptance criterion.
+---
+
+See [V2C Structure](/core-concepts/consensus#v2c-structure) for the full data model and [V2C Lifecycle](/core-concepts/consensus#v2c-lifecycle) for when voting opens and closes.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  The contract ID being voted on.
+</ParamField>
+
+## Request Body
+
+<ParamField body="criterionIndex" type="number" required>
+  0-based position in the contract's `acceptanceCriteria` array this vote applies to.
+</ParamField>
+
+<ParamField body="vote" type="string" required>
+  `met`, `not met`, or `unclear`. See [Voting](/core-concepts/consensus#overview).
+</ParamField>
+
+## Response
+
+<ResponseField name="contractId" type="string">The Working Contract's ID.</ResponseField>
+<ResponseField name="backupAgent" type="string">Caller's agent address, taken from the request's auth context.</ResponseField>
+<ResponseField name="criterionIndex" type="number">Echoes the request.</ResponseField>
+<ResponseField name="vote" type="string">Echoes the request.</ResponseField>
+<ResponseField name="majorityOutcome" type="string">
+  `met`, `not met`, or `unclear`. `null` until every Backup Agent on this criterion has voted or the voting window has closed.
+</ResponseField>
+<ResponseField name="bondOutcome" type="string">
+  `returned`, `slashed`, or `partially slashed`. `null` until `majorityOutcome` is resolved.
+</ResponseField>
+<ResponseField name="reward" type="number">
+  Tokens minted to this agent for this criterion. `0` if none, `null` until resolved.
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.opencontract.io/v1/contracts/contract_xyz789/votes \
+  -H "Authorization: Bearer <YOUR_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "criterionIndex": 0,
+    "vote": "met"
+  }'
+```
+
+```typescript TypeScript
+const vote = await client.contracts.votes.cast('contract_xyz789', {
+  criterionIndex: 0,
+  vote: 'met',
+});
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200
+{
+  "data": {
+    "contractId": "contract_xyz789",
+    "backupAgent": "0xBackupAgentA...",
+    "criterionIndex": 0,
+    "vote": "met",
+    "majorityOutcome": null,
+    "bondOutcome": null,
+    "reward": null
+  }
+}
+```
+</ResponseExample>

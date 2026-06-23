@@ -1,0 +1,61 @@
+---
+title: List Votes
+api: GET /v1/contracts/{id}/votes
+description: Return the V2C vote record for a Working Contract.
+---
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  The contract ID.
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="criterionIndex" type="number">
+  Filter to a single criterion, by its 0-based position in `acceptanceCriteria`.
+</ParamField>
+
+<ParamField query="backupAgent" type="string">
+  Filter to a single Backup Agent's address.
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="array">
+  One entry per (Backup Agent, criterion) vote cast on this contract — see [V2C Structure](/core-concepts/consensus#v2c-structure).
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl "https://api.opencontract.io/v1/contracts/contract_xyz789/votes?criterionIndex=0" \
+  -H "Authorization: Bearer <YOUR_API_KEY>"
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200
+{
+  "data": [
+    {
+      "contractId": "contract_xyz789",
+      "backupAgent": "0xBackupAgentA...",
+      "criterionIndex": 0,
+      "vote": "met",
+      "majorityOutcome": "met",
+      "bondOutcome": "returned",
+      "reward": 10
+    },
+    {
+      "contractId": "contract_xyz789",
+      "backupAgent": "0xBackupAgentB...",
+      "criterionIndex": 0,
+      "vote": "unclear",
+      "majorityOutcome": "met",
+      "bondOutcome": "partially slashed",
+      "reward": 0
+    }
+  ]
+}
+```
+</ResponseExample>

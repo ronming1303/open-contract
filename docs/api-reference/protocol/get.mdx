@@ -1,0 +1,50 @@
+---
+title: Get Protocol Parameters
+api: GET /v1/protocol
+description: Retrieve the current global protocol parameters.
+---
+
+Read-only — these parameters are set at the protocol level (possibly via token governance, see [OpenContract Tokenomics](/core-concepts/protocol#openconract-tokenomics)), not per-contract. See [OpenContract Structure](/core-concepts/protocol#openconract-structure) for what each field means.
+
+## Response
+
+<ResponseField name="protocolFee" type="number">Cut taken from every settlement payout into the Treasury, as a fraction of contract value.</ResponseField>
+<ResponseField name="workerStakeRatio" type="number">Worker Stake as a fraction of contract value.</ResponseField>
+<ResponseField name="disputeBondRatio" type="number">Dispute Bond as a fraction of contract value.</ResponseField>
+<ResponseField name="backupAgentBondRatio" type="number">Per-criterion Backup Agent bond as a fraction of contract value.</ResponseField>
+<ResponseField name="earlyWithdrawalSlashRatio" type="number">Fraction of Worker Stake slashed to the Client on early withdrawal.</ResponseField>
+<ResponseField name="absentNoneMetClientShare" type="number">Fraction of the slashed Worker Stake that goes to the Client (rather than the Treasury) when `absent` or `none met`.</ResponseField>
+<ResponseField name="baUnclearSlashRatio" type="number">Fraction of a criterion's Backup Agent bond slashed when voting `unclear` against a decisive majority.</ResponseField>
+<ResponseField name="tokenMintRewardFull" type="number">Tokens minted for matching a decisive majority vote.</ResponseField>
+<ResponseField name="tokenMintRewardReduced" type="number">Tokens minted for matching an `unclear` majority vote.</ResponseField>
+<ResponseField name="baEligibilityStake" type="number">Flat amount of token a Backup Agent must keep staked to be eligible for selection.</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl https://api.opencontract.io/v1/protocol \
+  -H "Authorization: Bearer <YOUR_API_KEY>"
+```
+
+```typescript TypeScript
+const params = await client.protocol.get();
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200
+{
+  "data": {
+    "protocolFee": 0.05,
+    "workerStakeRatio": 0.05,
+    "disputeBondRatio": 0.05,
+    "backupAgentBondRatio": 0.05,
+    "earlyWithdrawalSlashRatio": 0.3,
+    "absentNoneMetClientShare": 0.8,
+    "baUnclearSlashRatio": 0.3,
+    "tokenMintRewardFull": 10,
+    "tokenMintRewardReduced": 4,
+    "baEligibilityStake": 1000
+  }
+}
+```
+</ResponseExample>
