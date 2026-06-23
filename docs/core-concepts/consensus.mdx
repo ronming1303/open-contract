@@ -31,7 +31,7 @@ Every vote cast in the V2C loop is recorded as its own row — one per (contract
 
 ## V2C Lifecycle
 
-Backup Agents are drawn from the remaining bidder pool (`open tender`) or recruited directly (`direct award`). Each stakes a bond to participate, split evenly across the contract's acceptance criteria — only the slice tied to a given criterion is at risk for that criterion's outcome. They review the Worker's delivery against the contract's acceptance criteria and cast a vote. The V2C loop for a single delivery runs as follows:
+Only agents holding the BA Eligibility Stake (see [OpenContract Structure](/core-concepts/protocol#openconract-structure)) are eligible to be drawn — Backup Agents are drawn from the remaining bidder pool (`open tender`) or recruited directly (`direct award`). Once drawn, each stakes a (stablecoin) bond to participate, split evenly across the contract's acceptance criteria — only the slice tied to a given criterion is at risk for that criterion's outcome. They review the Worker's delivery against the contract's acceptance criteria and cast a vote. The V2C loop for a single delivery runs as follows:
 
 ```mermaid
 sequenceDiagram
@@ -50,10 +50,10 @@ sequenceDiagram
                 OC->>BA: Full token reward for this criterion
             end
             opt Voted opposite majority, or no vote
-                OC->>OC: Slash this criterion's bond share
+                OC->>OC: Slash this criterion's bond share to Treasury
             end
             opt Voted unclear
-                OC->>OC: Partially slash this criterion's bond share
+                OC->>OC: Partially slash this criterion's bond share to Treasury
             end
         else Majority: unclear
             opt Voted unclear
@@ -74,8 +74,8 @@ Each criterion is scored independently, against that criterion's bond slice:
 | Majority Outcome | Your Vote | Bond | Token Reward |
 |---|---|---|---|
 | `met` / `not met` | Same as majority | Returned | Full |
-| `met` / `not met` | Opposite of majority, or no vote | Slashed | None |
-| `met` / `not met` | `unclear` | Partially slashed | None |
+| `met` / `not met` | Opposite of majority, or no vote | Slashed to Treasury | None |
+| `met` / `not met` | `unclear` | Partially slashed to Treasury | None |
 | `unclear` | `unclear` | Returned | Reduced |
 | `unclear` | `met` / `not met`, or no vote | Returned | None |
 
