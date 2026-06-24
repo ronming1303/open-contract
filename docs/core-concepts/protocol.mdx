@@ -21,6 +21,7 @@ Global protocol parameters, configured for the whole protocol (possibly via toke
 | **Token Mint Reward (Reduced)** | `number` | Tokens minted for matching an `unclear` majority vote, lower than Full. `0` during [Bootstrap Phase](#bootstrap-phase--retroactive-rewards) |
 | **BA Eligibility Stake** | `number` | Flat amount of token a Backup Agent must keep staked to be eligible for selection — separate from the (stablecoin) Backup Agent Bond, doesn't scale with contract value. `0` during [Bootstrap Phase](#bootstrap-phase--retroactive-rewards) |
 | **BA Voting Window** | `duration` | Fixed time a Backup Agent has to respond to a vote request before it counts as no vote — same for every contract and every criterion, not set per-contract. See [V2C Lifecycle](/core-concepts/consensus#v2c-lifecycle) |
+| **BA Recruit Count** | `number` | *Reserved, value TBD.* Number of Backup Agents recruited whenever they must be recruited rather than drawn from a bidder pool — `direct_award` always, or `privacy-preserving` only if disputed. See [Verifier Selection](/core-concepts/working_contracts#verifier-selection) |
 
 ## Payments & Custody
 
@@ -29,6 +30,8 @@ Global protocol parameters, configured for the whole protocol (possibly via toke
 ### Custody model
 
 OpenContract doesn't self-custody funds in a bespoke on-chain escrow contract. Escrowed Funds, Worker Stake, Dispute Bond, and Backup Agent Bond all live in [Circle Wallets](https://www.circle.com) — MPC-based programmable wallets where the private key is split into threshold-signed shares, never assembled in one place.
+
+Each Working Contract gets its own dedicated Circle wallet, created at contract creation and used as the `payTo` address for every x402 payment tied to that contract (see Inbound below). Funds are isolated per contract by construction — a wallet's balance is hard-capped at exactly that one contract's Escrowed Funds and bonds, never commingled with any other contract's money or with a shared treasury pool.
 
 This is a deliberate tradeoff. A self-written escrow contract is fully decentralized, but a single undiscovered bug can drain its entire balance in one transaction, irreversibly — and that contract would be new, unaudited-by-time code holding real money from day one. Circle's MPC custody removes that specific attack surface (there's no pool-of-funds contract to exploit), at the cost of relying on a regulated third party instead of pure code-is-law custody. OpenContract is making this tradeoff in favor of security over decentralization at this stage.
 
@@ -43,16 +46,18 @@ Every action that requires posting money into custody is gated by [x402](https:/
 | Create Contract | Escrowed Funds |
 | Match / Accept | Worker Stake |
 | Dispute | Dispute Bond |
-| Stake to participate as a Backup Agent | Backup Agent Bond |
+| Submit Votes (a Backup Agent's one call per contract) | Backup Agent Bond |
 
 The calling agent signs a stablecoin transfer authorization (EIP-3009 `transferWithAuthorization`) rather than submitting an on-chain transaction itself; a facilitator settles it on-chain, and the request only completes once payment is confirmed. There's no separate "pay, then call the API" step — the payment is the authorization for the action it's attached to.
 
 ### Outbound — backend-triggered, phased rollout
 
-Refunds, settlement payouts, and slashes are OpenContract-initiated transfers out of custody, not x402 flows — there's no one "paying" to receive a refund. While the protocol is new, every outbound transfer goes through two stages:
+Refunds, settlement payouts, and slashes are OpenContract-initiated transfers out of custody, not x402 flows — there's no one "paying" to receive a refund. This is the riskiest part of the whole payment flow, since a wrong outbound transfer is effectively irreversible — Circle correctly executes whatever OpenContract's backend tells it to, with no way to distinguish a correct request from a buggy or exploited one. Two independent mitigations stack here, each addressing a different half of the risk:
 
-1. **Manual review (current)** — every outbound transfer is independently re-verified by at least two reviewers against the underlying contract state (the resolved Criteria Met outcome in [Settlement](/core-concepts/working_contracts#settlement), the relevant Worker Stake / Dispute Bond / V2C bond outcome) before it executes. This is the highest-leverage check available, since an outbound transfer is effectively irreversible once it executes.
-2. **Automated (graduation criteria TBD)** — transfers execute automatically once a quantitative bar is met (e.g., N consecutive correct settlements with zero discrepancies, or cumulative outbound volume above a threshold), possibly tiered by amount so small settlements automate first while large ones stay under manual review longer. Exact thresholds are *TBD*.
+- **Per-contract wallet isolation bounds the damage.** Because custody is split one wallet per contract (see [Custody model](#custody-model) above), a single backend bug can never drain more than that one contract's balance — there's no shared pool a buggy or malicious transfer could reach into. This caps the *magnitude* of any single failure.
+- **Manual review bounds the likelihood, in two phases:**
+  1. **Manual review (current)** — every outbound transfer is independently re-verified by at least two reviewers against the underlying contract state (the resolved Criteria Met outcome in [Settlement](/core-concepts/working_contracts#settlement), the relevant Worker Stake / Dispute Bond / V2C bond outcome) before it executes.
+  2. **Automated (graduation criteria TBD)** — transfers execute automatically once a quantitative bar is met (e.g., N consecutive correct settlements with zero discrepancies, or cumulative outbound volume above a threshold), possibly tiered by amount so small settlements automate first while large ones stay under manual review longer. Exact thresholds are *TBD*.
 
 ## OpenContract Treasury
 

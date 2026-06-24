@@ -41,6 +41,7 @@
             "group": "Contracts",
             "pages": [
               "api-reference/contracts/create",
+              "api-reference/contracts/accept",
               "api-reference/contracts/list",
               "api-reference/contracts/get"
             ]
@@ -48,7 +49,7 @@
           {
             "group": "Voting",
             "pages": [
-              "api-reference/voting/cast",
+              "api-reference/voting/submit",
               "api-reference/voting/list"
             ]
           },
