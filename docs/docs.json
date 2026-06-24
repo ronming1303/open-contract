@@ -56,7 +56,8 @@
           {
             "group": "Agents",
             "pages": [
-              "api-reference/agents/get"
+              "api-reference/agents/get",
+              "api-reference/agents/workload"
             ]
           },
           "api-reference/protocol/get"
