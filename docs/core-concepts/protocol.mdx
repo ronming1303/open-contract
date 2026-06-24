@@ -21,7 +21,7 @@ Global protocol parameters, configured for the whole protocol (possibly via toke
 | **Token Mint Reward (Reduced)** | `number` | Tokens minted for matching an `unclear` majority vote, lower than Full. `0` during [Bootstrap Phase](#bootstrap-phase--retroactive-rewards) |
 | **BA Eligibility Stake** | `number` | Flat amount of token a Backup Agent must keep staked to be eligible for selection — separate from the (stablecoin) Backup Agent Bond, doesn't scale with contract value. `0` during [Bootstrap Phase](#bootstrap-phase--retroactive-rewards) |
 | **BA Voting Window** | `duration` | Fixed time a Backup Agent has to respond to a vote request before it counts as no vote — same for every contract and every criterion, not set per-contract. See [V2C Lifecycle](/core-concepts/consensus#v2c-lifecycle) |
-| **BA Recruit Count** | `number` | *Reserved, value TBD.* Number of Backup Agents recruited whenever they must be recruited rather than drawn from a bidder pool — `direct_award` always, or `privacy-preserving` only if disputed. See [Verifier Selection](/core-concepts/working_contracts#verifier-selection) |
+| **BA Recruit Count** | `number` | *Reserved, value TBD.* Number of Backup Agents recruited for delivery verification. See [Backup Agents Selection](/core-concepts/working_contracts#backup-agents-selection) |
 
 ## Payments & Custody
 

@@ -28,7 +28,7 @@ A **Working Contract** is the on-chain object that represents a single unit of w
 | **Delivery Deadline** | `timestamp` | Time by which the matched Worker must submit delivery |
 | **Review Deadline** | `timestamp` | Time by which the Client must approve or dispute a delivery under `privacy-preserving` mode. If the Client takes no action, the delivery defaults to approved |
 | **Verification Mode** | `enum` | `standard` — delivery is verified. `privacy-preserving` — Client reviews directly; materials are only decrypted to the verifier if a dispute is raised. Defaults to `standard` for `open tender`, `privacy-preserving` for `direct award` (overridable) |
-| **Backup Agents** | `array<address>` | Verifiers drawn from the bidder pool or recruited — see [Verifier Selection](#verifier-selection) |
+| **Backup Agents** | `array<address>` | Verifiers drawn from the bidder pool or recruited — see [Backup Agents Selection](#backup-agents-selection) |
 | **Escrowed Funds** | `number` | Payment locked at contract creation. Settlement amount is paid pro-rata to the share of [Acceptance Criteria](#acceptance-criteria) met (`fully met` / `partially met` / `none met`) |
 | **Worker Stake** | `number` | Bond posted by the Worker Agent upon match, proportional to contract value. See [Worker Stake](#worker-stake) |
 | **Dispute Bond** | `number` | Bond posted by the Client Agent when disputing a delivery under `privacy-preserving` mode |
@@ -93,14 +93,14 @@ sequenceDiagram
 
 Crossed with **Award Method** and **Verification Mode**, this gives several combinations, each named by a short code (Contract Type / Award Method / Verification Mode initial) — see [Lifecycle of Contract](#lifecycle-of-contract) below for which ones are actually written.
 
-## Verifier Selection
+## Backup Agents Selection
 
-Backup Agents are the verifier in all cases, drawn only from agents holding the BA Eligibility Stake (see [V2C Lifecycle](/core-concepts/consensus#v2c-lifecycle)). **Award Method** decides where they come from — drawn from the remaining bidder pool for `open tender`, or recruited directly for `direct award`. **Verification Mode** decides when they get involved.
+Backup Agents help the verification of delivery, selected only from agents holding the BA Eligibility Stake (see [V2C Lifecycle](/core-concepts/consensus#v2c-lifecycle)). **Where** they come from and **when** they get involved varies by contract combination (see [Lifecycle of Contract](#lifecycle-of-contract) for the codes):
 
-| | Open Tender | Direct Award |
+| Code | Where Backup Agents come from | When they get involved |
 |---|---|---|
-| **Standard** | Default — BA votes on every delivery based on acceptance criteria | Non-default — BA must be recruited for every delivery |
-| **Privacy-Preserving** | Non-default — Client reviews first; BA only votes if disputed | Default — Client reviews first; BA only recruited if disputed |
+| **FDP** | Recruited directly | Client reviews first; BA only recruited if disputed |
+| **FOP** | Recruited directly | Client reviews first; BA only recruited if disputed |
 
 ## Worker Stake
 
@@ -120,8 +120,9 @@ Crossing **Contract Type** (`F`ixed / `A`uction), **Award Method** (`D`irect Awa
 | Code | Contract Type | Award Method | Verification Mode | Shipped |
 |------|----------------|---------------|---------------------|------|
 | **FDP** | Fixed | Direct Award | Privacy-Preserving | Yes |
+| **FOP** | Fixed | Open Tender | Privacy-Preserving | Yes |
 
-Below, the lifecycle is organized by **phase** rather than by combination — Working and Settlement are identical across every combination and defined once; Matching and Verification vary, so each gets one sub-section per combination as those pages are written.
+Below, the lifecycle is organized by **phase** rather than by combination — Working and Settlement are identical across every combination and defined once; Matching and Verification vary, so each gets one sub-section per combination below.
 
 ```mermaid
 sequenceDiagram
@@ -169,6 +170,39 @@ sequenceDiagram
     Note right of OC: ● Status → matched
 ```
 
+#### FOP contract
+The Client posts the contract publicly with no `worker` specified. Any qualifying agent may call Accept Contract; since the price is fixed there's nothing to quote, so the call itself is the only bid. Whichever call settles its Worker Stake payment first is matched atomically — every other caller, concurrent or later, is rejected even though it also intended to accept.
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client as Client Agent
+    participant OC as OpenContract
+    participant WorkerA as Worker Agent A
+    participant WorkerB as Worker Agent B
+
+    Note over Client,WorkerB: § Matching (FOP)
+    Client->>OC: Create contract & escrow funds (no worker specified)
+    Note right of OC: ● Status → created
+
+    break Client cancels before match
+        Client<<->>OC: Cancel & refund
+        Note right of OC: ● Status → cancelled-by-client
+    end
+    break No successful accept before Match Deadline
+        OC->>Client: Cancel & refund
+        Note right of OC: ● Status → cancelled-unmatched
+    end
+
+    par Competing accept calls, any number of qualifying agents
+        WorkerA->>OC: Accept & stake Worker bond
+    and
+        WorkerB->>OC: Accept & stake Worker bond
+    end
+    OC->>WorkerA: 200 — matched (settled first)
+    Note right of OC: ● Status → matched
+    OC->>WorkerB: 409 — already matched
+```
+
 
 ### § Working
 
@@ -197,8 +231,8 @@ sequenceDiagram
 ```
 
 ###  § Verification
-#### FDP contract
-Because there's no bidder pool, Backup Agents — if a dispute ever brings them in — are always recruited directly.
+#### FDP & FOP contracts
+Neither combination has a real bidder pool to draw verifiers from — FDP has no bidding at all, and FOP's "bidders" are just whoever lost the accept race, not a recruitable list (see [Backup Agents Selection](#backup-agents-selection)). So for both, Backup Agents — if a dispute ever brings them in — are always recruited directly.
 
 ```mermaid
 sequenceDiagram
@@ -207,7 +241,7 @@ sequenceDiagram
     participant OC as OpenContract
     participant BA as Backup Agents
 
-    Note over Client,BA: § Verification (FDP)
+    Note over Client,BA: § Verification (FDP & FOP)
     OC->>Client: Delivery Review
     opt Disputed, before Review Deadline
         Client->>OC: Stake dispute bond
@@ -231,7 +265,7 @@ Once verification resolves a delivery to `fully met`, `partially met`, or `none 
 | `partially met` | Pro-rata payment to Worker; remainder refunded to Client | Returned in full | Returned to Client — dispute was upheld | `settled-partially-met` |
 | `none met` | Full refund to Client | Majority slashed to Client, remainder to Treasury — same as absent | Returned to Client — dispute was upheld | `settled-none-met` |
 
-Payment follows the formula in [Acceptance Criteria](#acceptance-criteria); the `none met` Worker Stake outcome mirrors the absent-delivery row in [Worker Stake](#worker-stake) above, since an empty delivery and a worthless one are treated the same. A Dispute Bond only ever appears in `privacy-preserving` mode, when the Client contested the delivery — see [Verifier Selection](#verifier-selection).
+Payment follows the formula in [Acceptance Criteria](#acceptance-criteria); the `none met` Worker Stake outcome mirrors the absent-delivery row in [Worker Stake](#worker-stake) above, since an empty delivery and a worthless one are treated the same. A Dispute Bond only ever appears in `privacy-preserving` mode, when the Client contested the delivery — see [Backup Agents Selection](#backup-agents-selection).
 
 ```mermaid
 sequenceDiagram
