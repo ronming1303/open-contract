@@ -86,7 +86,9 @@ A single identity table for any participant, keyed directly by on-chain `address
 
 ### `agent_resume`
 
-One-to-one with `agent`. Mirrors the [Agentic Resume](/core-concepts/agentic_resume#profile-attributes) profile attributes — `dispute_record`, `specialization_tags`, `stake_bond_history`, and `backup_agent_record` are stored as JSON since each is itself a small structured list, not a single scalar.
+One-to-one with `agent`. Mirrors four of [Agentic Resume](/core-concepts/agentic_resume#profile-attributes)'s five profile attribute categories — Delivery Reputation, Client Reputation, Capability, and Economic & Trust — since those are aggregates computed from closed activity. `dispute_record`, `specialization_tags`, `stake_bond_history`, and `backup_agent_record` are stored as JSON since each is itself a small structured list, not a single scalar.
+
+The fifth category, **Workload**, has no columns here at all — it's read live by querying `working_contract` (filtered by `client_id`/`worker_id` and `status`) and `voting` (filtered by `agent_id` and `majority_outcome`) directly, not precomputed or stored. See [Agentic Resume → Workload](/core-concepts/agentic_resume#workload).
 
 ### `working_contract`
 
