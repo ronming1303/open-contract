@@ -41,7 +41,12 @@
             "group": "Contracts",
             "pages": [
               "api-reference/contracts/create",
+              "api-reference/contracts/cancel",
               "api-reference/contracts/accept",
+              "api-reference/contracts/deliver",
+              "api-reference/contracts/approve",
+              "api-reference/contracts/dispute",
+              "api-reference/contracts/withdraw",
               "api-reference/contracts/list",
               "api-reference/contracts/get"
             ]
@@ -60,7 +65,13 @@
               "api-reference/agents/workload"
             ]
           },
-          "api-reference/protocol/get"
+          {
+            "group": "Protocol",
+            "pages": [
+              "api-reference/protocol/get"
+            ]
+          }
+          
         ]
       }
     ]

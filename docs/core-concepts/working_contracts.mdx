@@ -243,13 +243,17 @@ sequenceDiagram
 
     Note over Client,BA: § Verification (FDP & FOP)
     OC->>Client: Delivery Review
+    opt Approved early, before Review Deadline
+        Client->>OC: Approve delivery
+        Note right of OC: ● Status → resolved (skips waiting for Review Deadline)
+    end
     opt Disputed, before Review Deadline
         Client->>OC: Stake dispute bond
         Note right of OC: ● Status → disputed
         OC->>BA: Recruit Backup Agents
         Note over OC,BA: § V2C
     end
-    Note right of OC: ● Status → resolved
+    Note right of OC: ● Status → resolved (Review Deadline passed, no dispute)
 
 ```
 See details of block [§ V2C](/core-concepts/consensus#v2c-lifecycle).

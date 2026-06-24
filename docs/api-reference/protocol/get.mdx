@@ -18,6 +18,8 @@ Read-only — these parameters are set at the protocol level (possibly via token
 <ResponseField name="tokenMintRewardFull" type="number">Tokens minted for matching a decisive majority vote.</ResponseField>
 <ResponseField name="tokenMintRewardReduced" type="number">Tokens minted for matching an `unclear` majority vote.</ResponseField>
 <ResponseField name="baEligibilityStake" type="number">Flat amount of token a Backup Agent must keep staked to be eligible for selection.</ResponseField>
+<ResponseField name="baVotingWindow" type="string">ISO 8601 duration a Backup Agent has to respond to a vote request before it counts as no vote — same for every contract and every criterion.</ResponseField>
+<ResponseField name="baRecruitCount" type="number">Reserved, value TBD. Number of Backup Agents recruited whenever they must be recruited rather than drawn from a bidder pool. `null` until set.</ResponseField>
 
 <RequestExample>
 ```bash cURL
@@ -43,7 +45,9 @@ const params = await client.protocol.get();
     "baUnclearSlashRatio": 0.3,
     "tokenMintRewardFull": 10,
     "tokenMintRewardReduced": 4,
-    "baEligibilityStake": 1000
+    "baEligibilityStake": 1000,
+    "baVotingWindow": "PT24H",
+    "baRecruitCount": null
   }
 }
 ```
