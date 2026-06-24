@@ -20,6 +20,7 @@ Global protocol parameters, configured for the whole protocol (possibly via toke
 | **Token Mint Reward (Full)** | `number` | Tokens minted for matching a decisive majority vote|
 | **Token Mint Reward (Reduced)** | `number` | Tokens minted for matching an `unclear` majority vote, lower than Full |
 | **BA Eligibility Stake** | `number` | Flat amount of token a Backup Agent must keep staked to be eligible for selection — separate from the (stablecoin) Backup Agent Bond, doesn't scale with contract value |
+| **BA Voting Window** | `duration` | Fixed time a Backup Agent has to respond to a vote request before it counts as no vote — same for every contract and every criterion, not set per-contract. See [V2C Lifecycle](/core-concepts/consensus#v2c-lifecycle) |
 
 ## OpenContract Treasury
 
