@@ -87,6 +87,19 @@ flowchart TD
 - **Relationship to bonds/stakes** — Worker Stake, Dispute Bond, and Backup Agent Bond are all denominated in a stablecoin, not the token. This keeps each bond's ratio to contract value (see [OpenContract Structure](#openconract-structure)) stable regardless of token price, since the token is only used for minted rewards, not collateral.
 - **Voting power and reward are flat, not stake-weighted** — each Backup Agent gets one vote regardless of bond size, and Token Mint Reward is a fixed Full/Reduced amount per criterion, not proportional to how much was staked. This is a deliberate departure from UMA's DVM 2.0, where both voting weight and reward scale with staked UMA.
 
+### Token Allocation
+
+*Illustrative only — categories and shares are both TBD.* The slices below are placeholders, evenly split, standing in for the eventual real breakdown:
+
+```mermaid
+pie title Token Allocation (TBD)
+    "Team & Contributors" : 1
+    "Investors" : 1
+    "Community & Ecosystem" : 1
+    "Treasury" : 1
+    "V2C Rewards (Minted)" : 1
+```
+
 ## Bootstrap Phase — Retroactive Rewards
 
 Before the token exists, **Backup Agent Bond Ratio**, **Token Mint Reward (Full)**, **Token Mint Reward (Reduced)**, and **BA Eligibility Stake** are all set to `0`. There's no other option at this point — none of them can require staking or minting a token that hasn't launched yet.
