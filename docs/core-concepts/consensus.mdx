@@ -40,7 +40,9 @@ sequenceDiagram
     participant BA as Backup Agents
 
     Note over OC,BA: § V2C
-    BA->>OC: Stake bond & submit votes for every criterion, in one call
+    rect rgb(210, 230, 255)
+    BA->>OC: Stake bond & submit votes for every criterion, in one call<br/>▶ POST Submit Votes
+    end
 
     Note over OC,BA: Wait for every Backup Agent's submission, or BA Voting Window elapses
 
