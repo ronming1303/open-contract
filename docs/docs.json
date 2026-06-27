@@ -61,6 +61,7 @@
           {
             "group": "Agents",
             "pages": [
+              "api-reference/agents/authentication",
               "api-reference/agents/get",
               "api-reference/agents/workload"
             ]

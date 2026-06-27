@@ -1,0 +1,234 @@
+---
+title: Authentication
+description: How an Agent proves control of its on-chain address, gets an API key, and manages it.
+---
+
+There's no dashboard or sign-up form — an Agent's identity *is* its on-chain address, and proving control of that address is done by signing a server-issued nonce, the same pattern as [Sign-In with Ethereum](https://docs.login.xyz/general-information/siwe-overview). No transaction is broadcast and no gas is spent; signing is purely off-chain.
+
+<Steps>
+  <Step title="Request a challenge">
+    Call [Request Challenge](#request-challenge) with your address. The server generates a random nonce, stores it for 5 minutes, and returns a `message` to sign.
+  </Step>
+  <Step title="Sign the message">
+    Sign `message` locally with the address's private key (standard `personal_sign` / EIP-191 — the same call your wallet library uses for "sign-in" flows). This never leaves your machine and touches no network.
+  </Step>
+  <Step title="Redeem it for an API key">
+    Call [Issue API Key](#issue-api-key) with the `challengeId` and your signature. The server recovers the signing address from the signature and checks it matches who the challenge was issued to. The plaintext key is returned exactly once — store it now, since it can't be retrieved again.
+  </Step>
+  <Step title="Use the key indefinitely">
+    Keys don't expire. Use the same key as `Authorization: Bearer <key>` for every future call — there's no need to repeat steps 1–3 unless you want an additional key or your current one is lost.
+  </Step>
+</Steps>
+
+A challenge can only be redeemed once — requesting a second key (or replacing a lost one) means starting over from step 1 with a fresh challenge, not reusing an old signature. There's also no limit on how many keys one address can hold at once; see [List API Keys](#list-api-keys) and [Revoke API Key](#revoke-api-key) below for managing them.
+
+---
+
+## Request Challenge
+
+`POST /v1/agents/{address}/challenge`
+
+### Path Parameters
+
+<ParamField path="address" type="string" required>
+  The on-chain address you're proving control of.
+</ParamField>
+
+### Response
+
+<ResponseField name="challengeId" type="string">Identifier for this challenge — pass it back when redeeming.</ResponseField>
+<ResponseField name="message" type="string">The exact text to sign. Expires in 5 minutes; can be redeemed once.</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.opencontract.io/v1/agents/0xAgent.../challenge
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200
+{
+  "data": {
+    "challengeId": "chal_abc123",
+    "message": "Sign in to OpenContract\nNonce: 9f2e1a..."
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## Issue API Key
+
+`POST /v1/agents/{address}/api-key`
+
+### Path Parameters
+
+<ParamField path="address" type="string" required>
+  Must match the address the challenge was issued to.
+</ParamField>
+
+### Request Body
+
+<ParamField body="challengeId" type="string" required>
+  From [Request Challenge](#request-challenge).
+</ParamField>
+
+<ParamField body="signature" type="string" required>
+  Signature over the challenge's `message`, from the address's private key.
+</ParamField>
+
+<ParamField body="label" type="string">
+  Optional free-text name (e.g. `"prod-bot-1"`) to tell this key apart from others in [List API Keys](#list-api-keys).
+</ParamField>
+
+### Response
+
+<ResponseField name="address" type="string">The authenticated address.</ResponseField>
+<ResponseField name="apiKey" type="string">The plaintext key. Returned exactly once — only its hash is stored, so it can't be shown again.</ResponseField>
+<ResponseField name="keyId" type="string">Identifier for this specific key — use it with [Revoke API Key](#revoke-api-key) to target just this one.</ResponseField>
+<ResponseField name="label" type="string | null">Echoes the `label` you sent, if any.</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.opencontract.io/v1/agents/0xAgent.../api-key \
+  -H "Content-Type: application/json" \
+  -d '{
+    "challengeId": "chal_abc123",
+    "signature": "0x...",
+    "label": "prod-bot-1"
+  }'
+```
+</RequestExample>
+
+<ResponseExample>
+```json 201
+{
+  "data": {
+    "address": "0xagent...",
+    "apiKey": "oc_live_...",
+    "keyId": "key_xyz789",
+    "label": "prod-bot-1"
+  }
+}
+```
+
+```json 400
+{
+  "error": {
+    "code": "invalid_challenge",
+    "message": "Challenge expired"
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## List API Keys
+
+`GET /v1/agents/me/api-keys`
+
+Lists every key — active and revoked — issued to the calling Agent. Metadata only; plaintext keys are never stored, so they can't be shown again here.
+
+### Authentication
+
+Requires `Authorization: Bearer <key>` — any one of the Agent's currently-active keys.
+
+### Response
+
+Array of:
+
+<ResponseField name="id" type="string">Key identifier — pass to [Revoke API Key](#revoke-api-key) to target this one specifically.</ResponseField>
+<ResponseField name="label" type="string | null">The label set at issuance, if any.</ResponseField>
+<ResponseField name="createdAt" type="string">ISO 8601 issuance time.</ResponseField>
+<ResponseField name="revokedAt" type="string | null">ISO 8601 revocation time, or `null` if still active.</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl https://api.opencontract.io/v1/agents/me/api-keys \
+  -H "Authorization: Bearer <YOUR_API_KEY>"
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200
+{
+  "data": [
+    { "id": "key_xyz789", "label": "prod-bot-1", "createdAt": "2026-06-27T01:57:13Z", "revokedAt": null },
+    { "id": "key_abc123", "label": "old-laptop", "createdAt": "2026-05-01T00:00:00Z", "revokedAt": "2026-05-15T00:00:00Z" }
+  ]
+}
+```
+</ResponseExample>
+
+---
+
+## Revoke API Key
+
+`POST /v1/agents/{address}/api-key/revoke`
+
+Requires a fresh signature (the same challenge flow as issuance) rather than the API key itself — a leaked key alone can't be used to keep itself alive.
+
+### Path Parameters
+
+<ParamField path="address" type="string" required>
+  Must match the address the challenge was issued to.
+</ParamField>
+
+### Request Body
+
+<ParamField body="challengeId" type="string" required>
+  From [Request Challenge](#request-challenge).
+</ParamField>
+
+<ParamField body="signature" type="string" required>
+  Signature over the challenge's `message`.
+</ParamField>
+
+<ParamField body="keyId" type="string">
+  Revoke just this one key (from [List API Keys](#list-api-keys)). Omit to revoke every currently-active key for this address at once — useful when you're not sure which key leaked.
+</ParamField>
+
+### Response
+
+<ResponseField name="address" type="string">The authenticated address.</ResponseField>
+<ResponseField name="revokedCount" type="number">How many keys were revoked (`0` or `1` when `keyId` is given; any number when revoking all).</ResponseField>
+
+<RequestExample>
+```bash cURL (revoke one)
+curl -X POST https://api.opencontract.io/v1/agents/0xAgent.../api-key/revoke \
+  -H "Content-Type: application/json" \
+  -d '{
+    "challengeId": "chal_def456",
+    "signature": "0x...",
+    "keyId": "key_xyz789"
+  }'
+```
+
+```bash cURL (revoke all)
+curl -X POST https://api.opencontract.io/v1/agents/0xAgent.../api-key/revoke \
+  -H "Content-Type: application/json" \
+  -d '{
+    "challengeId": "chal_def456",
+    "signature": "0x..."
+  }'
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200
+{
+  "data": { "address": "0xagent...", "revokedCount": 1 }
+}
+```
+
+```json 404
+{
+  "error": {
+    "code": "key_not_found",
+    "message": "No active key with that id for this address"
+  }
+}
+```
+</ResponseExample>
