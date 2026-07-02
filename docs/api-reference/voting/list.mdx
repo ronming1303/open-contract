@@ -4,6 +4,8 @@ api: GET /v1/contracts/{id}/votes
 description: Return the V2C vote record for a Working Contract.
 ---
 
+This endpoint is public — no API key required.
+
 ## Path Parameters
 
 <ParamField path="id" type="string" required>
@@ -28,8 +30,7 @@ description: Return the V2C vote record for a Working Contract.
 
 <RequestExample>
 ```bash cURL
-curl "https://api.opencontract.io/v1/contracts/contract_xyz789/votes?criterionIndex=0" \
-  -H "Authorization: Bearer <YOUR_API_KEY>"
+curl "https://api.opencontract.io/v1/contracts/contract_xyz789/votes?criterionIndex=0"
 ```
 </RequestExample>
 

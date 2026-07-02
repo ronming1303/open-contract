@@ -4,6 +4,8 @@ api: GET /v1/contracts/{id}
 description: Retrieve a single Working Contract by ID.
 ---
 
+This endpoint is public — no API key required.
+
 ## Path Parameters
 
 <ParamField path="id" type="string" required>
@@ -43,8 +45,7 @@ Mirrors [Working Contracts → Contract Structure](/core-concepts/working_contra
 
 <RequestExample>
 ```bash cURL
-curl https://api.opencontract.io/v1/contracts/contract_xyz789 \
-  -H "Authorization: Bearer <YOUR_API_KEY>"
+curl https://api.opencontract.io/v1/contracts/contract_xyz789
 ```
 
 ```typescript TypeScript
