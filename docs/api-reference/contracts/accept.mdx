@@ -14,7 +14,7 @@ description: A Worker accepts or declines a contract, posting Worker Stake on ac
 **`accept: true` requires payment; `accept: false` doesn't.** Declining moves no money, so a decline call completes immediately. Accepting requires posting Worker Stake into the same per-contract escrow wallet used by [Create Contract](/api-reference/contracts/create) — same x402 flow:
 
 1. Call this endpoint with `accept: true`, no payment attached.
-2. The response is `402 Payment Required`, quoting the Worker Stake amount.
+2. The response is `402 Payment Required` — the quote (Worker Stake amount, `payTo`, asset) is in the base64-encoded `Payment-Required` response header (x402 v2); the body is just `{}`.
 3. Sign a stablecoin transfer authorization for that amount.
 4. Retry the same call with the signed authorization attached.
 5. Once the facilitator settles the transfer, `status` becomes `matched` and this response is returned.
@@ -74,19 +74,21 @@ curl -X POST https://api.opencontract.io/v1/contracts/contract_xyz789/accept \
 </RequestExample>
 
 <ResponseExample>
-```json 402
+```json 402 (decoded Payment-Required header — body is just {})
 {
-  "x402Version": 1,
+  "x402Version": 2,
+  "error": "Payment required",
+  "resource": {
+    "url": "https://api.opencontract.io/v1/contracts/contract_xyz789/accept",
+    "description": "Worker Stake for this Working Contract"
+  },
   "accepts": [
     {
       "scheme": "exact",
-      "network": "base",
-      "maxAmountRequired": "2500000",
-      "resource": "/v1/contracts/contract_xyz789/accept",
-      "description": "Worker Stake for this Working Contract",
+      "network": "eip155:84532",
       "payTo": "0xEscrowWalletForThisContract...",
-      "asset": "<USDC contract address on Base>",
-      "maxTimeoutSeconds": 60
+      "asset": "<USDC contract address>",
+      "maxAmountRequired": "2500000"
     }
   ]
 }
