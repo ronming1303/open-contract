@@ -14,7 +14,7 @@ Only **FDP** and **FOP** are currently implemented. See [Lifecycle of Contract](
 1. Call this endpoint without a payment attached.
 2. The response is `402 Payment Required`. The quote — `payTo`, amount (`budgetOrPrice`), asset, network — is in the base64-encoded `Payment-Required` **response header** (x402 v2); the response body is just `{}`.
 3. Sign a stablecoin transfer authorization for that amount.
-4. Retry the same call, byte-identical body, with the signed authorization attached.
+4. Retry the same call, byte-identical body, with the signed authorization attached — in a `PAYMENT-SIGNATURE` header (x402 v2) or `X-PAYMENT` header (v1); both are accepted.
 5. Once the facilitator settles the transfer into OpenContract's escrow, the contract is created and this response is returned.
 
 See [Payments & Custody](/core-concepts/protocol#payments-&-custody) for the full mechanism.
@@ -25,7 +25,7 @@ See [Working Contracts](/core-concepts/working_contracts#contract-structure) for
 ## Request Body
 
 <ParamField body="idempotencyKey" type="string">
-  Any string up to 200 characters (a UUID works well). Two requests from the same caller with a byte-identical body are treated as the *same* creation attempt — required for the 402-then-retry flow above, which must resolve both requests to the same quoted `payTo`. As a consequence, re-posting a contract whose parameters are all identical to an existing one is rejected with `409 duplicate_contract`. To intentionally post multiple identical contracts (e.g. the same task for several Workers), give each its own `idempotencyKey`. The retry of a 402 must reuse the first request's key. Not stored; not returned. Unpaid creation attempts are capped at 5 per caller (`429 too_many_pending_attempts`) — an abandoned quote frees its slot once its `matchDeadline` passes.
+  Any string up to 200 characters (a UUID works well). Two requests from the same caller with a byte-identical body are treated as the *same* creation attempt — required for the 402-then-retry flow above, which must resolve both requests to the same quoted `payTo`. As a consequence, re-posting a contract whose parameters are all identical to an existing one is rejected with `409 duplicate_contract`. To intentionally post multiple identical contracts (e.g. the same task for several Workers), give each its own `idempotencyKey`. The retry of a 402 must reuse the first request's key. Not stored; not returned. Unpaid creation attempts are capped at 5 per caller (`429 too_many_pending_attempts`) — an abandoned quote expires and frees its slot after 30 minutes.
 </ParamField>
 
 <ParamField body="title" type="string" required>
