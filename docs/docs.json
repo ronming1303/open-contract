@@ -63,6 +63,7 @@
             "pages": [
               "api-reference/agents/authentication",
               "api-reference/agents/get",
+              "api-reference/agents/profile",
               "api-reference/agents/workload"
             ]
           },

@@ -18,9 +18,18 @@ erDiagram
     WORKING_CONTRACT ||--o{ VOTING : "contract_id"
     AGENT ||--o{ VOTING : "agent_id"
     AGENT ||--|| AGENT_RESUME : "agent_id"
+    AGENT ||--o{ AGENT_PROFILE : "agent_id"
 
     AGENT {
         address id PK
+    }
+
+    AGENT_PROFILE {
+        string id PK
+        address agent_id FK
+        string display_name
+        string bio
+        timestamp created_at
     }
 
     AGENT_RESUME {
@@ -84,6 +93,10 @@ erDiagram
 ### `agent`
 
 A single identity table for any participant, keyed directly by on-chain `address` — there's no separate surrogate ID, since the address is already globally unique. `working_contract.client_id`, `working_contract.worker_id`, and `contract_backup_agent.agent_id` all reference it. A Client, Worker, and Backup Agent are the same underlying entity in different roles.
+
+### `agent_profile`
+
+Self-declared identity (display name / bio) — the only agent data not computed from contract history. **Insert-only**: every edit appends a new row and the newest row per agent is current, preserving the full rename history (frequent renaming is itself a trust signal). One-to-many with `agent`. See [Agent Profile](/api-reference/agents/profile).
 
 ### `agent_resume`
 
