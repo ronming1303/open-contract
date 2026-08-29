@@ -1,0 +1,504 @@
+---
+title: TokenSwap
+description: OpenContract's first service-matching application — a market for time-bounded, verifiable AI inference capacity.
+---
+
+<Warning>
+TokenSwap is a product and protocol design in development. The TEE Gateway, usage receipt protocol, and usage-capacity settlement described on this page are not shipped yet.
+</Warning>
+
+## Overview
+
+**TokenSwap** is the first service-matching application built with OpenContract. It matches Buyers that need AI inference capacity with Sellers that can provide otherwise-idle API, subscription, bundle, or committed capacity during a defined future time window.
+
+The traded object is an **AI Usage Ticket**, not an API key and not a financial token. A ticket is a non-transferable right to consume a bounded AI inference service under an agreed policy:
+
+- a provider and model tier;
+- a start and end time window;
+- a maximum spend and/or usage allowance;
+- reserved throughput, rate limits, and concurrency;
+- allowed use and content policy;
+- availability, refund, and penalty rules;
+- evidence, receipt, and logging requirements.
+
+TokenSwap uses OpenContract for commitments, money, disputes, and settlement. Actual model invocation and metering happen off-chain inside a Usage Gateway, ultimately a Trusted Execution Environment (TEE) Gateway.
+
+<Note>
+In TokenSwap, **usage tokens** are model input, cached-input, and output units. They are unrelated to any future OpenContract protocol or governance token.
+</Note>
+
+## Why TokenSwap Uses OpenContract
+
+A conventional API proxy can route requests and collect payment, but it does not create a neutral, auditable agreement between a capacity Buyer and Seller. TokenSwap applies OpenContract's service-contract primitives to continuous machine-delivered work:
+
+| OpenContract primitive | TokenSwap use |
+|---|---|
+| Client Agent | Buyer |
+| Worker Agent | Seller |
+| Working Contract | AI Usage Ticket |
+| Escrowed Funds | Maximum Buyer payment locked for the ticket |
+| Worker Stake | Seller performance collateral |
+| Dispute Bond | Buyer bond for a contested settlement |
+| Delivery | Final usage receipt and committed evidence log |
+| Acceptance Criteria | Machine-verifiable policy and service-level agreement (SLA) conditions |
+| Backup Agents | Human or agent arbitrators for evidence that cannot be resolved deterministically |
+
+TokenSwap is not forced into the ordinary one-time-delivery settlement formula. It is a specialized `usage_capacity` contract whose payment is calculated from signed usage, reserved availability, and SLA credits.
+
+## Participants
+
+Each participant has a defined responsibility and a corresponding **trust boundary**: facts or decisions that cannot be established by that participant's claim alone.
+
+| Participant | Responsibility | Trust boundary |
+|---|---|---|
+| **Buyer** | Funds escrow and signs every authorized request | Claims about request authorization or usage require Buyer signatures and TEE receipts |
+| **Seller** | Supplies authorized capacity, a scoped credential, and Seller Stake | Availability, delivered model, and usage cannot be established by Seller self-reporting alone |
+| **OpenContract** | Records commitments, holds escrow and bonds, coordinates disputes, and executes settlement | It does not observe upstream execution and cannot originate token-consumption facts |
+| **TEE Gateway** | Enforces policy, protects secrets, invokes the provider, meters usage, and signs receipts | It produces execution evidence but does not hold contract funds or decide settlement unilaterally |
+| **Upstream Provider** | Executes model inference and reports provider metadata and billable usage | It reports upstream facts but does not decide ticket settlement or dispute outcomes |
+| **Dispute Resolver** | Reviews evidence that deterministic verification cannot resolve | It adjudicates ambiguous evidence but does not override deterministic signature, policy, or arithmetic checks |
+
+The **Gateway Operator** is a distinct protocol role. OpenContract may operate the first Gateway, but the contract must not assume that OpenContract and the Gateway Operator are permanently the same entity. Future tickets may select an OpenContract-operated TEE, a qualified third-party TEE, or another approved gateway implementation.
+
+## Separation of Control
+
+TokenSwap separates money and adjudication from secrets and execution:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Buyer
+    participant OC as OpenContract
+    participant Seller
+    participant TEE as TEE Gateway
+    participant Provider as Upstream Provider
+
+    Note over Buyer,Seller: Contract and Funds
+    rect rgb(210, 230, 255)
+        Buyer->>OC: Create ticket, commit policy hash, and fund escrow
+        Seller->>OC: Accept ticket and post Seller Stake
+    end
+
+    Note over Seller,Provider: Secrets and Execution
+    TEE->>Seller: Attestation, measurement, and provisioning key
+    Seller->>TEE: Encrypted scoped credential
+    Buyer->>TEE: Signed encrypted request
+    TEE->>Provider: Invoke approved model
+    Provider-->>TEE: Response and usage metadata
+    TEE-->>Buyer: Response and signed usage receipt
+
+    Note over Buyer,OC: Evidence and Settlement
+    TEE->>OC: Checkpoints and final receipt
+    Buyer->>OC: Approve or dispute
+    rect rgb(210, 230, 255)
+        OC-->>Buyer: Refund or dispute remedy
+        OC-->>Seller: Payment and returned stake
+    end
+```
+
+### OpenContract controls
+
+- ticket creation, matching, and lifecycle state;
+- Buyer escrow, Seller Stake, and Dispute Bond;
+- the committed policy hash and approved TEE measurement;
+- receipt checkpoints and the final evidence commitment;
+- deterministic settlement and escalation to dispute resolution;
+- refunds, payouts, and slashing.
+
+### TEE Gateway controls
+
+- the Seller's scoped upstream credential;
+- Buyer request authentication and replay protection;
+- request and response plaintext inside the protected execution boundary;
+- time-window, quota, rate-limit, and model-policy enforcement;
+- provider invocation;
+- quota state and receipt sequence;
+- receipt signing and evidence-log commitments.
+
+The OpenContract application and its ordinary backend must never receive the Seller credential or Buyer prompt in plaintext in the TEE design.
+
+## AI Usage Ticket
+
+A ticket is a policy-bound capacity contract. Its canonical serialization is hashed, and `policyHash` is committed through OpenContract before credential provisioning or usage begins.
+
+### Core ticket fields
+
+| Field | Description |
+|---|---|
+| `ticketId` | Unique ticket identifier |
+| `buyer` | Address whose signatures authorize requests |
+| `seller` | Address responsible for supplying capacity |
+| `gatewayOperator` | Selected Gateway Operator identity |
+| `gatewayType` | `platform`, `seller_hosted`, or `tee` |
+| `provider` | Upstream provider or approved provider class |
+| `allowedModels` | Exact model/deployment allowlist |
+| `startsAt`, `endsAt` | Inclusive service window boundaries |
+| `maxCost` | Hard maximum billable upstream cost |
+| `usageAllowance` | Optional input, cached-input, output, image, audio, or other unit limits |
+| `reservedThroughput` | Capacity reserved for the Buyer during the window |
+| `rateLimits` | RPM, TPM, concurrency, burst, and request-size limits |
+| `allowedUse` | Allowed modalities, tools, regions, and use restrictions |
+| `pricing` | Reservation fee, metered rates, and overage behavior |
+| `sla` | Availability, latency, provider-error, refund, and penalty rules |
+| `evidencePolicy` | Receipt contents, checkpoint cadence, retention, and dispute disclosure rules |
+| `policyHash` | Hash of the complete canonical ticket policy |
+| `approvedMeasurements` | TEE code measurements accepted by both parties |
+
+`maxCost` is required even when a ticket also specifies token allowances. Input, cached-input, output, and multimodal units may have different prices and throughput weights; a token count alone is not a safe financial limit.
+
+### Pricing model
+
+The preferred contract separates capacity reservation from actual use:
+
+```text
+Maximum Escrow = Reservation Fee + Maximum Usage Charge
+
+Seller Payment =
+  Reservation Fee x Availability Factor
+  + Verified Usage Charge
+  - SLA Credits
+```
+
+- The Reservation Fee compensates the Seller for holding capacity available, even if the Buyer does not use it.
+- The Usage Charge is calculated only from verified receipts.
+- Unused Usage Escrow is refunded.
+- Seller failure reduces the Availability Factor and may trigger SLA credits or stake slashing.
+- Seller Stake should cover credible replacement-cost exposure, not only a fixed percentage of ticket price.
+
+## TEE Attestation and Credential Provisioning
+
+The Seller does not encrypt a credential to a permanent platform key. It provisions the credential only after verifying a fresh TEE instance:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Seller
+    participant OC as OpenContract
+    participant TEE as TEE Gateway
+
+    TEE->>TEE: Boot approved public Gateway code
+    TEE->>TEE: Generate ephemeral provisioning key and receipt key
+    TEE->>Seller: Attestation, code measurement, policy hash, public keys
+    Seller->>OC: Read committed policy and approved measurement
+    Seller->>Seller: Verify attestation, measurement, policy, and freshness
+    Seller->>TEE: Encrypt and provision scoped credential
+    TEE->>TEE: Seal credential and initialize quota state
+    TEE->>OC: Sign readiness receipt
+```
+
+The Seller-provided credential should be:
+
+- dedicated to one ticket or a narrowly bounded ticket pool;
+- restricted to agreed models, endpoints, projects, and regions where supported;
+- protected by an upstream hard spend and throughput limit;
+- short-lived or immediately revocable;
+- deleted or revoked when the ticket closes.
+
+TEE protection reduces trust in the Gateway Operator, but upstream limits still bound loss if the TEE, its policy, or provider adapter contains a bug.
+
+## Request Lifecycle
+
+Every accepted request is authorized by the Buyer and processed against the committed policy:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Buyer
+    participant TEE as TEE Gateway
+    participant Provider as Upstream Provider
+    participant Log as Encrypted Evidence Log
+    participant OC as OpenContract
+
+    Buyer->>TEE: Encrypted request, ticket ID, nonce, timestamp, Buyer signature
+    TEE->>TEE: Verify signature, nonce, window, model, quota, and rate limits
+    TEE->>Log: Persist call intent and reserve maximum quota
+    TEE->>Provider: Invoke approved endpoint and model
+    Provider->>TEE: Response, usage metadata, provider request ID
+    TEE->>TEE: Finalize charge and quota state
+    TEE->>Log: Append signed usage receipt
+    TEE->>Buyer: Response and signed usage receipt
+    opt Checkpoint threshold reached
+        TEE->>OC: Signed cumulative checkpoint and Merkle root
+    end
+```
+
+Rejected and failed requests also produce signed **denial receipts**. Standard status classes include:
+
+- `outside_window`;
+- `invalid_signature`;
+- `nonce_replayed`;
+- `buyer_rate_limited`;
+- `quota_exhausted`;
+- `policy_rejected`;
+- `provider_rate_limited`;
+- `provider_error`;
+- `gateway_unavailable` when externally provable.
+
+Without denial receipts, a Seller or Gateway could omit failed attempts and present a misleading availability record.
+
+## Usage Receipts
+
+### Public usage receipt
+
+The settlement-safe receipt excludes prompt and response plaintext:
+
+```json
+{
+  "ticketId": "ticket_001",
+  "sequence": 42,
+  "policyHash": "0x...",
+  "buyerRequestSignature": "0x...",
+  "requestCommitment": "0x...",
+  "responseCommitment": "0x...",
+  "provider": "openai",
+  "requestedModel": "model-tier-a",
+  "providerReportedModel": "model-snapshot-a",
+  "providerRequestId": "request_...",
+  "startedAt": "2026-08-25T20:14:03Z",
+  "completedAt": "2026-08-25T20:14:05Z",
+  "inputTokens": 810,
+  "cachedInputTokens": 500,
+  "outputTokens": 230,
+  "cost": "0.0062",
+  "quotaBefore": "4.2162",
+  "quotaAfter": "4.2100",
+  "status": "success",
+  "previousReceiptHash": "0x...",
+  "teeMeasurement": "0x...",
+  "teeSignature": "0x..."
+}
+```
+
+Request and response commitments must include ticket-specific context, sequence, canonical content, and a random salt. An unsalted hash of a short or predictable prompt may permit dictionary guessing. The salt remains in the private evidence envelope unless disclosure is required.
+
+### Private evidence envelope
+
+Evidence that may expose Buyer content is encrypted separately:
+
+```json
+{
+  "canonicalRequest": "...",
+  "canonicalResponse": "...",
+  "requestSalt": "...",
+  "responseSalt": "...",
+  "providerRawMetadata": {},
+  "gatewayDiagnostics": {}
+}
+```
+
+The evidence policy determines who can decrypt this envelope. Possible recipients include the Buyer, the active TEE, and a pre-agreed dispute resolver. OpenContract does not receive routine access to plaintext prompts merely because a dispute exists.
+
+## Evidence Storage and Checkpointing
+
+Every receipt must be durable, but every full receipt does not need to be stored in OpenContract or posted on-chain.
+
+| Layer | Stored evidence | Purpose |
+|---|---|---|
+| Buyer | Response and complete signed receipt | Independent copy and immediate verification |
+| Encrypted evidence log | Full receipts and private envelopes | Durable dispute evidence |
+| OpenContract | Policy, attestation reference, cumulative checkpoints, and final root | Contract state and settlement commitment |
+| Public/on-chain log, optional | Compact periodic or final roots | Timestamping and anti-equivocation |
+
+### Periodic checkpoint
+
+The TEE submits a checkpoint after a configured number of receipts, elapsed time, or uncommitted value:
+
+```json
+{
+  "ticketId": "ticket_001",
+  "fromSequence": 1,
+  "toSequence": 100,
+  "merkleRoot": "0x...",
+  "lastReceiptHash": "0x...",
+  "cumulativeInputTokens": 45210,
+  "cumulativeOutputTokens": 12380,
+  "cumulativeCost": "1.72",
+  "successCount": 94,
+  "providerErrorCount": 3,
+  "policyRejectedCount": 3,
+  "remainingQuota": "3.28",
+  "checkpointedAt": "2026-08-25T21:00:00Z",
+  "teeSignature": "0x..."
+}
+```
+
+OpenContract verifies that:
+
+- the TEE signature and measurement are approved;
+- `policyHash` matches the ticket;
+- sequence ranges are continuous;
+- the receipt hash chain connects to the previous checkpoint;
+- cumulative usage never decreases;
+- remaining quota never increases except through an explicit contract amendment;
+- the checkpoint is newer than the last accepted state.
+
+`maxUncheckpointedExposure` limits the value the TEE may consume without a successful checkpoint. When the threshold is reached, new calls pause until the checkpoint is accepted.
+
+### Final receipt
+
+At expiry or exhaustion, the TEE revokes or deletes the credential and signs the final state:
+
+```json
+{
+  "ticketId": "ticket_001",
+  "finalSequence": 267,
+  "finalReceiptHash": "0x...",
+  "finalMerkleRoot": "0x...",
+  "totalCost": "4.31",
+  "remainingUsageEscrow": "0.69",
+  "availability": "0.994",
+  "closedReason": "window_expired",
+  "credentialDestroyed": true,
+  "closedAt": "2026-08-25T23:00:00Z",
+  "teeSignature": "0x..."
+}
+```
+
+The final receipt is the TokenSwap equivalent of a Working Contract delivery. The Buyer may approve it or dispute before the Review Deadline; silence may resolve optimistically according to the ticket policy.
+
+## Evidence Chain
+
+The complete cooperation record is:
+
+```text
+Buyer and Seller policy agreement
+  -> OpenContract policy hash
+  -> TEE attestation and approved code measurement
+  -> attested credential provisioning and readiness receipt
+  -> Buyer-signed request
+  -> durable call intent
+  -> provider response and usage metadata
+  -> TEE-signed usage or denial receipt
+  -> chronological receipt hash chain
+  -> batch Merkle checkpoint
+  -> OpenContract final root and final receipt
+  -> Buyer approval or dispute
+  -> settlement, refund, or slashing
+```
+
+The hash chain establishes receipt order. Merkle proofs establish inclusion in a committed batch. Neither primitive independently proves that a log is complete; completeness additionally depends on Buyer-held receipts, monotonically increasing sequence numbers, TEE-enforced logging, bounded uncheckpointed exposure, and upstream billing reconciliation.
+
+### Crash-safe metering
+
+The TEE persists a `call_intent` and reserves quota before invoking the provider. It finalizes the receipt only after receiving provider usage metadata. If the TEE crashes after the provider may have charged the Seller but before finalization, recovery exposes an `indeterminate` call rather than silently dropping it. The provider request ID and billing record are then used for reconciliation.
+
+TEE sealed storage protects confidentiality but does not by itself prevent an operator from restoring an old encrypted snapshot. Recovery must reject any quota or sequence state older than the latest OpenContract checkpoint. Upstream hard spending limits remain the final loss bound.
+
+## Verification and Disputes
+
+TokenSwap resolves deterministic evidence before recruiting Backup Agents:
+
+| Claim | Primary evidence | Resolution path |
+|---|---|---|
+| Buyer did not authorize a request | Buyer signature, nonce, and timestamp | Deterministic signature verification |
+| Buyer replayed or exceeded limits | Sequence, nonce set, and denial receipts | Deterministic policy verification |
+| Seller did not provide the purchased allowance | Quota state, receipts, denial reasons, and final receipt | Deterministic metering plus reconciliation |
+| Gateway was unavailable | Heartbeats, checkpoint gaps, and externally observed probes | SLA rule; dispute only if evidence conflicts |
+| Wrong endpoint or model parameter was used | Policy allowlist, TEE measurement, receipt, and adapter log | Deterministic TEE evidence |
+| Provider did not run the claimed model internally | Provider metadata, dedicated deployment, invoice, and account reconciliation | Dispute resolution if provider evidence is inconclusive |
+| Buyer violated allowed use | Private evidence commitment and selectively disclosed envelope | Specialized dispute resolution |
+| Receipt log and provider bill disagree | Provider request IDs, invoice, receipts, and checkpoints | Reconciliation, then dispute if unresolved |
+
+Backup Agents do not vote on cryptographic facts such as whether a signature is valid or whether a timestamp falls inside a window. They adjudicate only evidence that deterministic verification cannot resolve.
+
+TEE attestation proves that approved code issued the invocation and receipt under the committed policy. It does not cryptographically prove which model weights an upstream provider executed internally. Model-integrity claims therefore use combined evidence rather than TEE evidence alone.
+
+## Settlement
+
+At ticket close:
+
+1. The TEE submits the final receipt and evidence root.
+2. OpenContract verifies the TEE signature, measurement, policy hash, checkpoint continuity, and deterministic SLA calculations.
+3. The Buyer approves or enters the optimistic review window.
+4. A dispute posts the configured Dispute Bond and identifies the contested receipt range or SLA claim.
+5. Deterministic checks run first; unresolved claims recruit qualified dispute resolvers.
+6. OpenContract pays verified usage and earned reservation fees, refunds unused escrow, applies SLA credits, returns or slashes Seller Stake, and resolves the Dispute Bond.
+
+TokenSwap may report `fully_met`, `partially_met`, or `none_met` for compatibility with Working Contract outcomes, but the payout amount comes from usage-capacity settlement rules rather than an unweighted count of acceptance criteria. An all-`unclear` dispute must not default automatically to full Seller payment.
+
+## Protection and Verification Matrix
+
+TokenSwap uses several complementary controls. **Encryption** protects confidentiality, **isolation** limits access, **hashes** bind data and state, **signatures** authenticate actors and receipts, and **attestation** authenticates the TEE execution environment. No single control proves that the complete system is correct.
+
+| Protection goal | Primary mechanism | What it establishes | Remaining limitation | Mitigation or fallback |
+|---|---|---|---|---|
+| Protect the Seller credential | Encrypt to an attested TEE key; decrypt only inside the TEE; use sealed storage and upstream hard limits | The ordinary Gateway Operator, Buyer, and OpenContract backend do not receive the credential in plaintext | Code or hardware vulnerabilities remain; the Seller can still revoke the credential | Use short-lived scoped credentials, hard spend caps, monitoring, and Seller Stake |
+| Protect Buyer prompts and responses | Buyer-to-TEE encrypted session; provider TLS terminates inside the TEE; encrypted response to Buyer | The Seller and ordinary OpenContract backend cannot read session plaintext from the Gateway | The Upstream Provider normally receives the prompt to perform inference | Disclose the boundary and prefer providers with suitable retention and privacy terms |
+| Identify the running Gateway code | TEE measurement, fresh remote attestation, vendor certificate chain, and an attested ephemeral key | The running instance loaded the measured code and initial state reported by genuine TEE hardware | A valid measurement does not prove that the measured code is free of bugs | Audit releases, pin approved versions, and revoke vulnerable measurements |
+| Connect public source to the measurement | Open source, locked dependencies, and reproducible builds | Independent builders can reproduce the binary and compare its measurement with the attestation | Source, dependencies, compiler, and build process still require review | Publish build recipes, dependency manifests, and independent build attestations |
+| Bind execution to the agreed ticket | Canonical policy, party approval, and `policyHash` committed in OpenContract, attestation, and receipts | The TEE and receipts refer to the same policy accepted by Buyer and Seller | Canonicalization and policy-engine errors are still possible | Version the schema and publish canonical test vectors |
+| Prove Buyer request authorization | Buyer signature over ticket ID, nonce, timestamp, model parameters, and request commitment | The request was authorized by the Buyer and cannot be replayed without detection | A compromised Buyer signing key can authorize malicious requests | Support key rotation, revocation, session limits, and anomaly monitoring |
+| Protect receipt authenticity and history | TEE receipt signature, monotonic sequence, hash chain, Merkle batches, and checkpoints | Who issued a receipt, its order, and its inclusion in a committed batch | Hash chains and Merkle roots do not independently prove that every real call was logged | Keep Buyer copies, bound uncheckpointed exposure, and reconcile provider bills |
+| Protect quota state from reuse or rollback | Durable `call_intent`, sealed state, external checkpoints, sequence checks, and upstream spend caps | Recovery can reject state older than the latest accepted checkpoint and bound uncommitted loss | Sealed storage alone cannot prevent an operator from replaying an old snapshot | Require the latest checkpoint on recovery and retain an upstream hard cap |
+| Separate execution evidence from money | TEE produces evidence; OpenContract holds escrow and applies committed settlement rules | The execution environment cannot directly transfer contract funds or settle its own claim | OpenContract custody and settlement implementation must still operate correctly | Isolate funds per ticket, verify payouts, and roll out automation gradually |
+| Verify the requested model path | Attested endpoint/model allowlist, provider metadata, request ID, dedicated deployment, and billing reconciliation | Approved code requested the allowed model through the committed provider path | It does not prove which model weights the Provider executed internally | Reconcile dedicated deployments and disclose this residual trust explicitly |
+
+## Trust Model
+
+### Properties TokenSwap targets
+
+- The Buyer never receives the Seller credential.
+- The Seller does not receive Buyer prompt plaintext from the Gateway.
+- The ordinary OpenContract backend cannot read the credential, prompt, response, or TEE signing key.
+- The Buyer cannot create billable usage without signing a request.
+- The Seller cannot deny Buyer-authorized successful calls that have Buyer-held receipts.
+- The Gateway Operator cannot change code or policy without changing the attested measurement or policy hash.
+- OpenContract cannot create a valid TEE receipt without the attested receipt key.
+- Credential scope, upstream limits, checkpoints, escrow, and stakes bound the loss from failures that cryptography cannot prevent.
+
+### Residual trust and failure modes
+
+TEE execution does not prevent:
+
+- the Gateway Operator from stopping the machine or blocking its network;
+- hardware, firmware, side-channel, or attestation-service failures;
+- bugs in approved Gateway code or provider adapters;
+- the Seller revoking a credential during the service window;
+- the upstream provider misreporting or internally changing a model;
+- policy-compliant but harmful or illegal requests.
+
+These risks are handled with redundancy, monitoring, scoped credentials, provider reconciliation, SLA remedies, stake, dispute resolution, and supplier eligibility rules rather than by claiming the system is fully trustless.
+
+## MVP and Evolution
+
+### Closed MVP
+
+The first test may use one Buyer and one Seller, one provider adapter, test-value escrow, and an OpenContract-operated Gateway. Its purpose is to validate the ticket lifecycle and evidence semantics:
+
+- create and match an AI Usage Ticket;
+- commit a policy hash;
+- provision a dedicated, capped, revocable credential;
+- authenticate Buyer requests;
+- enforce window, quota, and rate limits;
+- generate usage and denial receipts;
+- build a receipt hash chain and periodic roots;
+- submit a final receipt;
+- exercise approval, a simulated dispute, and settlement.
+
+The MVP may initially substitute a process-isolated Gateway for a production TEE, but it must preserve the same interfaces for secret storage, attestation, signing, policy evaluation, receipt storage, and checkpointing. Its trust assumptions must be disclosed as `gatewayType: platform`.
+
+### TEE-Ledger
+
+Move receipt signing, quota state, sequence state, and checkpoint construction into an attested environment. Add sealed-state recovery and rollback protection.
+
+### TEE Gateway
+
+Move credential provisioning and the complete Buyer-to-provider request path into the TEE. Buyer requests and provider responses remain encrypted outside the attested environment.
+
+### Verification TEE and open supply
+
+Add pre-listing and pre-window verification of Seller access, multiple qualified Gateway Operators, provider billing reconciliation, supplier authorization classes, and redundant TEE deployments.
+
+## Non-goals
+
+TokenSwap is not:
+
+- an API-key marketplace;
+- an account- or subscription-sharing product;
+- a transferable claim on future cash flows;
+- a prediction market;
+- a secondary market for an OpenContract protocol token;
+- proof that an upstream provider internally executed particular model weights;
+- a replacement for provider terms, supplier authorization, privacy review, or applicable regulation.
+
+The open-market version should admit only supply whose authorization permits the Seller to provide the contracted downstream service. The closed MVP validates product mechanics, not the legal eligibility of every future supply source.

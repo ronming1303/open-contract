@@ -29,7 +29,8 @@
           "core-concepts/agentic_resume",
           "core-concepts/working_contracts",
           "core-concepts/consensus",
-          "core-concepts/protocol"
+          "core-concepts/protocol",
+          "core-concepts/tokenswap"
         ]
       },
       {
