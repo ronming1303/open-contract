@@ -270,17 +270,20 @@ The settlement-safe receipt excludes prompt and response plaintext:
   "quotaBefore": "4.2162",
   "quotaAfter": "4.2100",
   "status": "success",
+  "contentPolicyViolation": false,
   "previousReceiptHash": "0x...",
   "teeMeasurement": "0x...",
   "teeSignature": "0x..."
 }
 ```
 
-Request and response commitments must include ticket-specific context, sequence, canonical content, and a random salt. An unsalted hash of a short or predictable prompt may permit dictionary guessing. The salt remains in the private evidence envelope unless disclosure is required.
+Request and response commitments must include ticket-specific context, sequence, canonical content, and a random salt. An unsalted hash of a short or predictable prompt may permit dictionary guessing. The salt remains in the private evidence envelope, never disclosed.
+
+`contentPolicyViolation` carries the upstream Provider's own moderation/safety verdict for the call (most providers already flag or refuse policy-violating requests) — it's a plain boolean the Provider already computed, not something derived from Buyer content, so it belongs in the public receipt rather than the private envelope. It's the primary evidence for [Buyer Misuse Complaints](#buyer-misuse-complaints).
 
 ### Private evidence envelope
 
-Evidence that may expose Buyer content is encrypted separately:
+The actual prompt and response are encrypted separately, to the **Buyer's own key only**:
 
 ```json
 {
@@ -293,7 +296,7 @@ Evidence that may expose Buyer content is encrypted separately:
 }
 ```
 
-The evidence policy determines who can decrypt this envelope. Possible recipients include the Buyer, the active TEE, and a pre-agreed dispute resolver. OpenContract does not receive routine access to plaintext prompts merely because a dispute exists.
+This envelope exists so the Buyer can browse its own usage history later — the Buyer already receives the plaintext response directly at call time, so this is a durable personal copy, not new information. Nobody else ever needs it: settlement only needs the public receipt above (see [Settlement](#settlement)), and [Buyer Misuse Complaints](#buyer-misuse-complaints) resolve from `contentPolicyViolation`, not from re-reading content. Single-recipient encryption is deliberate — a scheme where the Seller, OpenContract, or a dispute resolver could also decrypt it would mean the Buyer is being asked to hand over evidence against itself, which it has no incentive to do. Seller-side allowed-use restrictions narrower than the Provider's own policy (a ticket's `allowedUse` disallowing something the Provider's moderation wouldn't itself flag) are a known gap this doesn't cover — deferred rather than solved with added key-sharing complexity.
 
 ## Evidence Storage and Checkpointing
 
@@ -302,9 +305,11 @@ Every receipt must be durable, but every full receipt does not need to be stored
 | Layer | Stored evidence | Purpose |
 |---|---|---|
 | Buyer | Response and complete signed receipt | Independent copy and immediate verification |
-| Encrypted evidence log | Full receipts and private envelopes | Durable dispute evidence |
-| OpenContract | Policy, attestation reference, cumulative checkpoints, and final root | Contract state and settlement commitment |
+| Encrypted evidence log | Public receipt fields plus the Buyer-encrypted private envelope, per call | Durable per-call record; queryable by receipt range for a dispute |
+| OpenContract | Public receipt fields (aggregated via checkpoints below), attestation reference, cumulative checkpoints, and final root | Contract state and settlement commitment |
 | Public/on-chain log, optional | Compact periodic or final roots | Timestamping and anti-equivocation |
+
+The encrypted evidence log is not the TEE's own working memory, and not local disk on the machine running the TEE — a real TEE's protected memory is small and expensive, and tying durable evidence to one compute instance's lifecycle risks losing it if that instance is terminated or its operator stops it (see [Trust Model](#trust-model)). The TEE only needs to hold constant-size working state at any moment — remaining quota, the hash of the most recent receipt (to extend the chain), and the in-flight `call_intent` — and flushes each signed receipt out to durable storage as soon as it's produced (see [Crash-safe metering](#crash-safe-metering)); nothing accumulates in the TEE itself as the ticket's call count grows. That durable storage is also kept separate from OpenContract's own database: it's bulk, rarely-read, per-call data with a very different cost and access profile than OpenContract's settlement-critical state, and coupling the two would make the Gateway's live operation depend on OpenContract's availability for every checkpoint — see [Separation of Control](#separation-of-control). Since the public receipt fields carry no Buyer content (only the private envelope does — see [Private evidence envelope](#private-evidence-envelope)), who operates or administers this storage doesn't affect confidentiality; it only affects durability and cost.
 
 ### Periodic checkpoint
 
@@ -403,7 +408,7 @@ TokenSwap resolves deterministic evidence before recruiting Backup Agents:
 | Gateway was unavailable | Heartbeats, checkpoint gaps, and externally observed probes | SLA rule; dispute only if evidence conflicts |
 | Wrong endpoint or model parameter was used | Policy allowlist, TEE measurement, receipt, and adapter log | Deterministic TEE evidence |
 | Provider did not run the claimed model internally | Provider metadata, dedicated deployment, invoice, and account reconciliation | Dispute resolution if provider evidence is inconclusive |
-| Buyer violated allowed use | Private evidence commitment and selectively disclosed envelope | See [Buyer Misuse Complaints](#buyer-misuse-complaints) |
+| Buyer violated allowed use | `contentPolicyViolation` on the public receipt (the Provider's own moderation verdict) | See [Buyer Misuse Complaints](#buyer-misuse-complaints) |
 | Receipt log and provider bill disagree | Provider request IDs, invoice, receipts, and checkpoints | Reconciliation, then dispute if unresolved |
 
 Backup Agents do not vote on cryptographic facts such as whether a signature is valid or whether a timestamp falls inside a window. They adjudicate only evidence that deterministic verification cannot resolve.
@@ -416,7 +421,7 @@ Availability isn't the only thing that can go wrong with a ticket — a Buyer ca
 
 - **Who can file**: only the Seller, against the Buyer on that ticket. There is no symmetric path the other direction — a Buyer's recourse for a Seller's non-performance is the existing availability criterion and dispute machinery in [Verification and Disputes](#verification-and-disputes), not this one.
 - **Window**: a fixed period after the ticket's service window (`endsAt`) closes. Filed after that window, a complaint is rejected outright.
-- **Evidence**: the same private evidence envelope and selective-disclosure mechanism used elsewhere (see [Usage Receipts](#usage-receipts)) — the Seller discloses only what's needed to support the claim, not the Buyer's full request/response history.
+- **Evidence**: `contentPolicyViolation` on the relevant receipt(s) — see [Public usage receipt](#public-usage-receipt). This is the upstream Provider's own moderation verdict, already public, so no content ever needs to be decrypted to file or adjudicate a complaint. A ticket's `allowedUse` terms narrower than the Provider's own policy (something the Provider's moderation wouldn't itself flag) aren't covered by this evidence and are a known gap, deferred rather than solved by giving the Seller or a resolver access to the Buyer's private evidence envelope — see [Private evidence envelope](#private-evidence-envelope) for why that's single-recipient by design.
 - **Adjudication**: OpenContract reviews each complaint directly rather than recruiting Backup Agents — the same lightweight path as the manual outbound-transfer review described in [Payments & Custody](/core-concepts/protocol#payments-&-custody), not the on-chain V2C flow. This is an early-stage tradeoff, not a permanent one; it may move to Backup Agent adjudication once volume justifies it.
 - **Outcome has no effect on this ticket's settlement.** No funds move either way — the Ticket Price is still paid or refunded purely by the availability criterion, regardless of how a misuse complaint resolves. A complaint only writes a reputational record, and it's symmetric to discourage frivolous use of it: upheld records a violation against the **Buyer's** Agentic Resume; rejected records an unfounded complaint against the **Seller's** own Agentic Resume instead, the same way an unfounded Dispute Bond claim costs the Client under the ordinary Working Contract flow. Both reuse the existing `disputeRecord.upheld`/`disputeRecord.rejected` structure — from the complained-against party's point of view.
 
