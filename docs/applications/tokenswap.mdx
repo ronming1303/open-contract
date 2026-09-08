@@ -229,19 +229,19 @@ sequenceDiagram
     end
 ```
 
-Rejected and failed requests also produce signed **denial receipts**. Standard status classes include:
+Rejected and failed requests also produce signed **denial receipts**. Each status class carries a fault attribution — which party's availability record it counts against, if any — used by [Settlement](#settlement):
 
-- `outside_window`;
-- `invalid_signature`;
-- `nonce_replayed`;
-- `buyer_rate_limited`;
-- `quota_exhausted`;
-- `policy_rejected`;
-- `provider_rate_limited`;
-- `provider_error`;
-- `gateway_unavailable` when externally provable.
+| Status | Fault |
+|---|---|
+| `outside_window`, `invalid_signature`, `nonce_replayed`, `buyer_rate_limited`, `quota_exhausted` | Buyer — not a Seller availability failure at all; the TEE is enforcing limits the Buyer agreed to |
+| `policy_rejected` | Buyer, unless the policy itself was misconfigured by the Seller |
+| `provider_error`, `provider_rate_limited` | Seller — it chose this Provider and is responsible for its capacity |
+| `gateway_credential_failure` | Seller — the Seller's own credential was never provisioned, expired, or was rejected by the Provider |
+| `gateway_network_failure` | **The Gateway Operator** — a network- or infrastructure-layer fault in the Gateway itself, distinct from a Seller-side credential problem |
 
-Without denial receipts, a Seller or Gateway could omit failed attempts and present a misleading availability record.
+`gateway_network_failure` replaces a plain `gateway_unavailable`: a TEE can already tell the difference in code between "I can't reach the Provider at all" (network/infrastructure layer) and "the Provider rejected my credential" (application layer, `gateway_credential_failure`) without needing a human judgment call — so the denial receipt should say which one happened rather than collapsing both into one ambiguous status.
+
+This distinction matters specifically because the Gateway Operator isn't always the Seller — in the Closed MVP, OpenContract operates the Gateway itself (`gatewayType: platform`), so a `gateway_network_failure` there is OpenContract's own fault, not the Seller's. Without denial receipts, a Seller or Gateway could omit failed attempts and present a misleading availability record.
 
 ## Usage Receipts
 
@@ -405,7 +405,7 @@ TokenSwap resolves deterministic evidence before recruiting Backup Agents:
 | Buyer did not authorize a request | Buyer signature, nonce, and timestamp | Deterministic signature verification |
 | Buyer replayed or exceeded limits | Sequence, nonce set, and denial receipts | Deterministic policy verification |
 | Seller did not provide the purchased allowance | Quota state, receipts, denial reasons, and final receipt | Deterministic metering plus reconciliation |
-| Gateway was unavailable | Heartbeats, checkpoint gaps, and externally observed probes | SLA rule; dispute only if evidence conflicts |
+| Gateway was unavailable, and whose fault it was | `gateway_network_failure` vs `gateway_credential_failure` denial receipts — see [Request Lifecycle](#request-lifecycle) | Deterministic from the denial status; dispute only if the classification itself is contested |
 | Wrong endpoint or model parameter was used | Policy allowlist, TEE measurement, receipt, and adapter log | Deterministic TEE evidence |
 | Provider did not run the claimed model internally | Provider metadata, dedicated deployment, invoice, and account reconciliation | Dispute resolution if provider evidence is inconclusive |
 | Buyer violated allowed use | `contentPolicyViolation` on the public receipt (the Provider's own moderation verdict) | See [Buyer Misuse Complaints](#buyer-misuse-complaints) |
@@ -431,9 +431,15 @@ TokenSwap tickets carry exactly **one** Acceptance Criterion, authored by the pr
 
 > The Seller maintained the ticket's committed capacity availability during the service window.
 
-This single criterion is evaluated automatically from the final receipt's `availability` value against the ticket's `sla` threshold:
+This single criterion is evaluated automatically from the final receipt's `availability` value against the ticket's `sla` threshold. `availability` itself is computed with a **three-way fault split**, not a Buyer-or-Seller binary — see the fault column in [Request Lifecycle](#request-lifecycle):
 
-- **`met`** — final `availability` ≥ the ticket's `sla` threshold, with no unresolved `indeterminate` calls and no denial pattern attributable to the Seller (credential never provisioned, readiness receipt never signed, excess `gateway_unavailable`/`provider_error`).
+```text
+availability = successful_calls / (successful_calls + seller_attributable_failures)
+```
+
+`seller_attributable_failures` excludes both Buyer-caused denials (those aren't a Seller availability failure at all — the TEE is just enforcing limits the Buyer agreed to) and Gateway-Operator-caused denials (`gateway_network_failure`) — the latter is neither Buyer's fault nor Seller's, so it's dropped from the ratio entirely rather than defaulting onto either side. This matters concretely in the Closed MVP, where OpenContract operates the Gateway itself: an outage in OpenContract's own infrastructure must not silently count against the Seller it's also judging.
+
+- **`met`** — final `availability` ≥ the ticket's `sla` threshold, with no unresolved `indeterminate` calls.
 - **`not met`** — the threshold was missed for reasons attributable to the Seller.
 - **`unclear`** — the evidence is inconclusive (e.g. conflicting attestation or provider records); resolved through the Backup Agent / dispute-resolver path in [Verification and Disputes](#verification-and-disputes).
 
