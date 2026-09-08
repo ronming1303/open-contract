@@ -50,6 +50,7 @@
               "api-reference/contracts/cancel",
               "api-reference/contracts/accept",
               "api-reference/contracts/deliver",
+              "api-reference/contracts/checkpoint",
               "api-reference/contracts/approve",
               "api-reference/contracts/dispute",
               "api-reference/contracts/withdraw",

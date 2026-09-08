@@ -1,0 +1,153 @@
+---
+title: Submit Checkpoint
+api: POST /v1/contracts/{id}/checkpoint
+description: Report periodic progress on a continuous-delivery contract without ending it.
+---
+
+<Note>
+Must be called by the contract's matched `worker` — any other caller is rejected. Only valid while `status` is `matched`. Unlike [Submit Delivery](/api-reference/contracts/deliver), this never changes `status` — a contract can receive any number of checkpoints while `matched`; only a final Submit Delivery call moves it to `under-review`.
+</Note>
+
+This is a generic Working Contract capability — see [Contract Structure](/core-concepts/working_contracts#contract-structure) — for a contract that delivers continuously over its window rather than in one shot at the end. [TokenSwap](/applications/tokenswap#evidence-storage-and-checkpointing) is the only application using it today: its TEE Gateway calls this periodically (by receipt count, elapsed time, or accumulated value) so a Buyer's usage cap can be enforced and the ticket's final availability can be reconstructed from a timeline, not just a closing tally.
+
+No payment is attached to this call.
+
+`fromSequence`/`toSequence` ranges must be gapless across a contract's checkpoints — the first must start at `1`, and each later one must start exactly where the previous left off. `checkpointedAt` must strictly increase. Both are rejected with `409` otherwise — this is what prevents a checkpoint from ever being silently skipped, replayed, or reordered.
+
+`teeMeasurement`/`teeSignature`/`merkleRoot`/`lastReceiptHash` are stored as provided but not yet cryptographically verified — see [Periodic checkpoint](/applications/tokenswap#periodic-checkpoint) for what's real today versus planned.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  The contract ID.
+</ParamField>
+
+## Request Body
+
+<ParamField body="fromSequence" type="integer" required>
+  Start of this checkpoint's receipt range. Must equal the previous checkpoint's `toSequence` + 1, or `1` for the first checkpoint.
+</ParamField>
+
+<ParamField body="toSequence" type="integer" required>
+  End of this checkpoint's receipt range. Must be >= `fromSequence`.
+</ParamField>
+
+<ParamField body="merkleRoot" type="string" required>
+  Merkle root over the receipts in this range.
+</ParamField>
+
+<ParamField body="lastReceiptHash" type="string" required>
+  Hash of the last receipt in this range, extending the per-call hash chain.
+</ParamField>
+
+<ParamField body="teeMeasurement" type="string" required>
+  Code measurement of the TEE that produced this checkpoint.
+</ParamField>
+
+<ParamField body="teeSignature" type="string" required>
+  TEE signature over this checkpoint.
+</ParamField>
+
+<ParamField body="checkpointedAt" type="string" required>
+  ISO 8601 time this checkpoint was produced. Must be strictly after the previous checkpoint's.
+</ParamField>
+
+<ParamField body="data" type="object" required>
+  Application-specific cumulative metrics for this range (e.g. TokenSwap's `cumulativeInputTokens`, `successCount`, `providerErrorCount`). Stored as-is; not validated against any shape at this level.
+</ParamField>
+
+## Response
+
+Returns the created checkpoint.
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.opencontract.io/v1/contracts/contract_xyz789/checkpoint \
+  -H "Authorization: Bearer <YOUR_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fromSequence": 1,
+    "toSequence": 100,
+    "merkleRoot": "0x...",
+    "lastReceiptHash": "0x...",
+    "teeMeasurement": "0x...",
+    "teeSignature": "0x...",
+    "checkpointedAt": "2026-08-25T21:00:00Z",
+    "data": { "successCount": 94, "providerErrorCount": 3 }
+  }'
+```
+</RequestExample>
+
+<ResponseExample>
+```json 201
+{
+  "data": {
+    "id": "9c2f...",
+    "contractId": "contract_xyz789",
+    "fromSequence": 1,
+    "toSequence": 100,
+    "merkleRoot": "0x...",
+    "lastReceiptHash": "0x...",
+    "teeMeasurement": "0x...",
+    "teeSignature": "0x...",
+    "data": { "successCount": 94, "providerErrorCount": 3 },
+    "checkpointedAt": "2026-08-25T21:00:00Z",
+    "createdAt": "2026-08-25T21:00:01Z"
+  }
+}
+```
+
+```json 403
+{
+  "error": {
+    "code": "forbidden",
+    "message": "Only the contract's matched worker may submit a checkpoint"
+  }
+}
+```
+
+```json 409 (sequence gap)
+{
+  "error": {
+    "code": "conflict",
+    "message": "fromSequence must be 101 — checkpoints must be gapless and cannot be resubmitted"
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## List Checkpoints
+
+`GET /v1/contracts/{id}/checkpoints`
+
+This endpoint is public — no API key required. Returns every checkpoint for the contract, ordered oldest first.
+
+<RequestExample>
+```bash cURL
+curl https://api.opencontract.io/v1/contracts/contract_xyz789/checkpoints
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200
+{
+  "data": [
+    {
+      "id": "9c2f...",
+      "contractId": "contract_xyz789",
+      "fromSequence": 1,
+      "toSequence": 100,
+      "merkleRoot": "0x...",
+      "lastReceiptHash": "0x...",
+      "teeMeasurement": "0x...",
+      "teeSignature": "0x...",
+      "data": { "successCount": 94, "providerErrorCount": 3 },
+      "checkpointedAt": "2026-08-25T21:00:00Z",
+      "createdAt": "2026-08-25T21:00:01Z"
+    }
+  ]
+}
+```
+</ResponseExample>

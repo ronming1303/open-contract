@@ -306,43 +306,45 @@ Every receipt must be durable, but every full receipt does not need to be stored
 |---|---|---|
 | Buyer | Response and complete signed receipt | Independent copy and immediate verification |
 | Encrypted evidence log | Public receipt fields plus the Buyer-encrypted private envelope, per call | Durable per-call record; queryable by receipt range for a dispute |
-| OpenContract | Public receipt fields (aggregated via checkpoints below), attestation reference, cumulative checkpoints, and final root | Contract state and settlement commitment |
+| OpenContract | Full checkpoint history (below) — not just the latest one, so the availability timeline itself is evidence, not only the final tally | Contract state and settlement commitment |
 | Public/on-chain log, optional | Compact periodic or final roots | Timestamping and anti-equivocation |
 
 The encrypted evidence log is not the TEE's own working memory, and not local disk on the machine running the TEE — a real TEE's protected memory is small and expensive, and tying durable evidence to one compute instance's lifecycle risks losing it if that instance is terminated or its operator stops it (see [Trust Model](#trust-model)). The TEE only needs to hold constant-size working state at any moment — remaining quota, the hash of the most recent receipt (to extend the chain), and the in-flight `call_intent` — and flushes each signed receipt out to durable storage as soon as it's produced (see [Crash-safe metering](#crash-safe-metering)); nothing accumulates in the TEE itself as the ticket's call count grows. That durable storage is also kept separate from OpenContract's own database: it's bulk, rarely-read, per-call data with a very different cost and access profile than OpenContract's settlement-critical state, and coupling the two would make the Gateway's live operation depend on OpenContract's availability for every checkpoint — see [Separation of Control](#separation-of-control). Since the public receipt fields carry no Buyer content (only the private envelope does — see [Private evidence envelope](#private-evidence-envelope)), who operates or administers this storage doesn't affect confidentiality; it only affects durability and cost.
 
 ### Periodic checkpoint
 
-The TEE submits a checkpoint after a configured number of receipts, elapsed time, or uncommitted value:
+The TEE submits a checkpoint after a configured number of receipts, elapsed time, or uncommitted value. `ticketId` is the URL path parameter, not a body field; the cumulative counts are TokenSwap-specific and live in `data` — see [Application Metadata](/core-concepts/working_contracts#contract-structure):
 
 ```json
+POST /v1/contracts/ticket_001/checkpoint
 {
-  "ticketId": "ticket_001",
   "fromSequence": 1,
   "toSequence": 100,
   "merkleRoot": "0x...",
   "lastReceiptHash": "0x...",
-  "cumulativeInputTokens": 45210,
-  "cumulativeOutputTokens": 12380,
-  "cumulativeCost": "1.72",
-  "successCount": 94,
-  "providerErrorCount": 3,
-  "policyRejectedCount": 3,
-  "remainingQuota": "3.28",
+  "teeMeasurement": "0x...",
+  "teeSignature": "0x...",
   "checkpointedAt": "2026-08-25T21:00:00Z",
-  "teeSignature": "0x..."
+  "data": {
+    "cumulativeInputTokens": 45210,
+    "cumulativeOutputTokens": 12380,
+    "cumulativeCost": "1.72",
+    "successCount": 94,
+    "providerErrorCount": 3,
+    "policyRejectedCount": 3,
+    "remainingQuota": "3.28"
+  }
 }
 ```
 
-OpenContract verifies that:
+Submitted via `POST /v1/contracts/:id/checkpoint`, callable only by the ticket's Seller (`workerId`), any number of times while the contract is `matched` — this never advances the contract's status; only a Final Receipt (below), submitted through the existing [Submit Delivery](/api-reference/contracts/deliver) call, moves it to `under-review`. `GET /v1/contracts/:id/checkpoints` returns the full ordered history for a given ticket — this is a generic Working Contract capability (see [Contract Structure](/core-concepts/working_contracts#contract-structure)), not TokenSwap-specific, though TokenSwap is the only application using it today.
 
-- the TEE signature and measurement are approved;
-- `policyHash` matches the ticket;
-- sequence ranges are continuous;
-- the receipt hash chain connects to the previous checkpoint;
-- cumulative usage never decreases;
-- remaining quota never increases except through an explicit contract amendment;
-- the checkpoint is newer than the last accepted state.
+OpenContract enforces, today:
+
+- `fromSequence` picks up exactly where the previous checkpoint's `toSequence` left off (gapless, and starts at 1) — rejected with `409` otherwise;
+- `checkpointedAt` strictly increases from one checkpoint to the next.
+
+Not yet enforced — `teeSignature`/`teeMeasurement` are stored but not cryptographically verified against the ticket's `approvedMeasurements`, since no real TEE attestation infrastructure exists yet in this phase (`gatewayType: platform`); the Merkle root and hash chain are likewise stored as opaque anchors rather than independently recomputed. These land once TEE-Ledger (see [MVP and Evolution](#mvp-and-evolution)) provides something real to verify against.
 
 `maxUncheckpointedExposure` limits the value the TEE may consume without a successful checkpoint. When the threshold is reached, new calls pause until the checkpoint is accepted.
 
