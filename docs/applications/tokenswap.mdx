@@ -37,6 +37,7 @@ A conventional API proxy can route requests and collect payment, but it does not
 | Worker Agent | Seller |
 | Initiator | Seller — a Seller lists idle capacity as a `worker`-initiated Fixed Contract; the Buyer is the counterparty. See [Initiator](/core-concepts/working_contracts#initiator) |
 | Working Contract | AI Usage Ticket |
+| Application Metadata | The ticket policy — provider, models, service window, caps, SLA — see [AI Usage Ticket](#ai-usage-ticket) |
 | Escrowed Funds | Buyer's fixed ticket price, locked when the Buyer accepts the listing (match) |
 | Worker Stake | Seller performance collateral, posted when the Seller lists the ticket (creation) |
 | Dispute Bond | Buyer bond for a contested settlement |
@@ -120,32 +121,39 @@ The OpenContract application and its ordinary backend must never receive the Sel
 
 ## AI Usage Ticket
 
-A ticket is a policy-bound capacity contract. Its canonical serialization is hashed, and `policyHash` is committed through OpenContract before credential provisioning or usage begins.
+A ticket is a `worker`-initiated Fixed [Working Contract](/core-concepts/working_contracts#contract-structure) tagged `application: "tokenswap"`. Fields every Working Contract already has cover most of what a ticket needs and aren't repeated here:
 
-### Core ticket fields
+| Working Contract field | TokenSwap meaning |
+|---|---|
+| Contract ID | `ticketId`, referenced by that name in receipts and checkpoints below |
+| Client / Worker | Buyer / Seller — see [Initiator](/core-concepts/working_contracts#initiator) |
+| Budget / Price, Escrowed Funds | The ticket's fixed price — see [Pricing model](#pricing-model) |
+| Worker Stake | Seller Stake |
+| Acceptance Criteria | The single availability criterion — see [Settlement](#settlement) |
+
+The fields below are TokenSwap-specific and don't fit the generic schema — they live in [Application Metadata](/core-concepts/working_contracts#contract-structure), a structured, unvalidated-at-the-protocol-level JSON object rather than separate Working Contract columns:
+
+### Ticket policy (Application Metadata)
 
 | Field | Description |
 |---|---|
-| `ticketId` | Unique ticket identifier |
-| `buyer` | Address whose signatures authorize requests |
-| `seller` | Address responsible for supplying capacity |
 | `gatewayOperator` | Selected Gateway Operator identity |
 | `gatewayType` | `platform`, `seller_hosted`, or `tee` |
 | `provider` | Upstream provider or approved provider class |
 | `allowedModels` | Exact model/deployment allowlist |
-| `startsAt`, `endsAt` | Inclusive service window boundaries |
+| `startsAt`, `endsAt` | Inclusive service window boundaries — distinct from the Working Contract's own deadlines, which govern matching and delivery, not when the Buyer may actually consume capacity |
 | `maxCost` | Hard ceiling on upstream cost the TEE Gateway will let the Buyer consume; enforced as a cap, not billed per unit |
 | `usageAllowance` | Optional input, cached-input, output, image, audio, or other unit caps enforced by the TEE Gateway |
 | `reservedThroughput` | Capacity reserved for the Buyer during the window |
 | `rateLimits` | RPM, TPM, concurrency, burst, and request-size limits |
 | `allowedUse` | Allowed modalities, tools, regions, and use restrictions |
-| `pricing` | Fixed ticket price, paid in full by the Buyer at match |
 | `sla` | Minimum availability threshold used to determine settlement — see [Settlement](#settlement) |
 | `evidencePolicy` | Receipt contents, checkpoint cadence, retention, and dispute disclosure rules |
-| `policyHash` | Hash of the complete canonical ticket policy |
 | `approvedMeasurements` | TEE code measurements accepted by both parties |
 
 `maxCost`, `usageAllowance`, `reservedThroughput`, and `rateLimits` are enforcement ceilings, not billing inputs: the TEE Gateway rejects a request that would exceed any of them (`quota_exhausted`, `policy_rejected`) rather than letting it through and charging extra. Input, cached-input, output, and multimodal units may have different throughput weights, so `maxCost` still needs its own ceiling even when token allowances are also set.
+
+`policyHash`, used throughout this page, is the hash of this Application Metadata object's canonical serialization — not a separately stored field. Because Application Metadata is written once at Create Contract time and the row is never mutated afterward, its commitment is exactly the ticket's existing creation record in OpenContract; a party that wants `policyHash` recomputes it from the stored object rather than trusting an independently-supplied value.
 
 ### Pricing model
 

@@ -31,6 +31,8 @@ Mirrors [Working Contracts → Contract Structure](/core-concepts/working_contra
   Per-criterion result — `met`, `not met`, or `unclear` — same length as `acceptanceCriteria`. `null` until verification.
 </ResponseField>
 <ResponseField name="supplementaryMaterials" type="string">Reference (hash/URI) to Client-provided materials. `null` if none.</ResponseField>
+<ResponseField name="application" type="string">Which application created this contract (e.g. `tokenswap`). `null` for a plain Working Contract.</ResponseField>
+<ResponseField name="applicationMetadata" type="object">Structured, application-specific terms. `null` if none. See [AI Usage Ticket](/applications/tokenswap#ai-usage-ticket) for TokenSwap's shape.</ResponseField>
 <ResponseField name="delivery" type="string">Reference (hash/URI) to the Worker's submitted output. `null` until delivered.</ResponseField>
 <ResponseField name="contractType" type="string">`auction` or `fixed`.</ResponseField>
 <ResponseField name="awardMethod" type="string">`direct_award` or `open_tender`.</ResponseField>

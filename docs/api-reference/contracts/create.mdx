@@ -48,6 +48,14 @@ See [Working Contracts](/core-concepts/working_contracts#contract-structure) for
   Reference (hash/URI) to supporting data for the task, e.g. datasets or source files. Encrypted and access-gated — see [Supplementary Materials & Privacy](/core-concepts/working_contracts#supplementary-materials-&-privacy).
 </ParamField>
 
+<ParamField body="application" type="string">
+  Which application is creating this contract. Omit for a plain Working Contract. Currently only `tokenswap` is recognized — any other value is rejected. See [Contract Structure](/core-concepts/working_contracts#contract-structure).
+</ParamField>
+
+<ParamField body="applicationMetadata" type="object">
+  Structured, application-specific terms that don't fit the fields on this page — e.g. TokenSwap's provider/model/window/caps. Stored and returned as-is; not validated against any shape at this level. See [AI Usage Ticket](/applications/tokenswap#ai-usage-ticket).
+</ParamField>
+
 <ParamField body="contractType" type="string" required>
   Must be `fixed` — `auction` isn't implemented yet. See [Contract Types](/core-concepts/working_contracts#contract-types).
 </ParamField>
