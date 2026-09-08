@@ -29,8 +29,13 @@
           "core-concepts/agentic_resume",
           "core-concepts/working_contracts",
           "core-concepts/consensus",
-          "core-concepts/protocol",
-          "core-concepts/tokenswap"
+          "core-concepts/protocol"
+        ]
+      },
+      {
+        "group": "Applications",
+        "pages": [
+          "applications/tokenswap"
         ]
       },
       {

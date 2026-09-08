@@ -4,21 +4,21 @@ description: OpenContract's first service-matching application — a market for 
 ---
 
 <Warning>
-TokenSwap is a product and protocol design in development. The TEE Gateway, usage receipt protocol, and usage-capacity settlement described on this page are not shipped yet.
+TokenSwap is a product and protocol design in development. The TEE Gateway, usage receipt protocol, and capacity-cap settlement described on this page are not shipped yet.
 </Warning>
 
 ## Overview
 
-**TokenSwap** is the first service-matching application built with OpenContract. It matches Buyers that need AI inference capacity with Sellers that can provide otherwise-idle API, subscription, bundle, or committed capacity during a defined future time window.
+**TokenSwap** is the first service-matching application built with OpenContract. A Seller with otherwise-idle API, subscription, bundle, or committed capacity lists a ticket for a defined future time window; a Buyer that needs AI inference capacity accepts it at a fixed price.
 
 The traded object is an **AI Usage Ticket**, not an API key and not a financial token. A ticket is a non-transferable right to consume a bounded AI inference service under an agreed policy:
 
 - a provider and model tier;
 - a start and end time window;
-- a maximum spend and/or usage allowance;
+- a maximum spend and/or usage allowance, enforced as a hard cap rather than billed per unit;
 - reserved throughput, rate limits, and concurrency;
 - allowed use and content policy;
-- availability, refund, and penalty rules;
+- a minimum availability threshold used to determine settlement;
 - evidence, receipt, and logging requirements.
 
 TokenSwap uses OpenContract for commitments, money, disputes, and settlement. Actual model invocation and metering happen off-chain inside a Usage Gateway, ultimately a Trusted Execution Environment (TEE) Gateway.
@@ -35,15 +35,16 @@ A conventional API proxy can route requests and collect payment, but it does not
 |---|---|
 | Client Agent | Buyer |
 | Worker Agent | Seller |
+| Initiator | Seller — a Seller lists idle capacity as a `worker`-initiated Fixed Contract; the Buyer is the counterparty. See [Initiator](/core-concepts/working_contracts#initiator) |
 | Working Contract | AI Usage Ticket |
-| Escrowed Funds | Maximum Buyer payment locked for the ticket |
-| Worker Stake | Seller performance collateral |
+| Escrowed Funds | Buyer's fixed ticket price, locked when the Buyer accepts the listing (match) |
+| Worker Stake | Seller performance collateral, posted when the Seller lists the ticket (creation) |
 | Dispute Bond | Buyer bond for a contested settlement |
 | Delivery | Final usage receipt and committed evidence log |
-| Acceptance Criteria | Machine-verifiable policy and service-level agreement (SLA) conditions |
+| Acceptance Criteria | A single system-evaluated availability criterion — see [Settlement](#settlement) |
 | Backup Agents | Human or agent arbitrators for evidence that cannot be resolved deterministically |
 
-TokenSwap is not forced into the ordinary one-time-delivery settlement formula. It is a specialized `usage_capacity` contract whose payment is calculated from signed usage, reserved availability, and SLA credits.
+TokenSwap sells a **capacity cap for a fixed price**, not a metered pay-as-you-go service: the Buyer pays once for the right to use up to the ticket's allowance within its window, there is no usage-based billing and no refund for unused capacity, and the Buyer cannot cancel after accepting. The TEE Gateway enforces the cap directly — it rejects requests once the allowance or window is exhausted — so usage receipts exist to prove the cap was respected and the capacity was actually available, not to calculate a bill.
 
 ## Participants
 
@@ -51,8 +52,8 @@ Each participant has a defined responsibility and a corresponding **trust bounda
 
 | Participant | Responsibility | Trust boundary |
 |---|---|---|
-| **Buyer** | Funds escrow and signs every authorized request | Claims about request authorization or usage require Buyer signatures and TEE receipts |
-| **Seller** | Supplies authorized capacity, a scoped credential, and Seller Stake | Availability, delivered model, and usage cannot be established by Seller self-reporting alone |
+| **Buyer** | Accepts a listed ticket, funds escrow at match, and signs every authorized request | Claims about request authorization or usage require Buyer signatures and TEE receipts |
+| **Seller** | Lists the ticket (provider, models, window, capacity cap, price), posts Seller Stake at listing, and supplies authorized capacity and a scoped credential | Availability, delivered model, and usage cannot be established by Seller self-reporting alone |
 | **OpenContract** | Records commitments, holds escrow and bonds, coordinates disputes, and executes settlement | It does not observe upstream execution and cannot originate token-consumption facts |
 | **TEE Gateway** | Enforces policy, protects secrets, invokes the provider, meters usage, and signs receipts | It produces execution evidence but does not hold contract funds or decide settlement unilaterally |
 | **Upstream Provider** | Executes model inference and reports provider metadata and billable usage | It reports upstream facts but does not decide ticket settlement or dispute outcomes |
@@ -75,8 +76,8 @@ sequenceDiagram
 
     Note over Buyer,Seller: Contract and Funds
     rect rgb(210, 230, 255)
-        Buyer->>OC: Create ticket, commit policy hash, and fund escrow
-        Seller->>OC: Accept ticket and post Seller Stake
+        Seller->>OC: List ticket, commit policy hash, and post Seller Stake
+        Buyer->>OC: Accept ticket and fund escrow
     end
 
     Note over Seller,Provider: Secrets and Execution
@@ -133,36 +134,34 @@ A ticket is a policy-bound capacity contract. Its canonical serialization is has
 | `provider` | Upstream provider or approved provider class |
 | `allowedModels` | Exact model/deployment allowlist |
 | `startsAt`, `endsAt` | Inclusive service window boundaries |
-| `maxCost` | Hard maximum billable upstream cost |
-| `usageAllowance` | Optional input, cached-input, output, image, audio, or other unit limits |
+| `maxCost` | Hard ceiling on upstream cost the TEE Gateway will let the Buyer consume; enforced as a cap, not billed per unit |
+| `usageAllowance` | Optional input, cached-input, output, image, audio, or other unit caps enforced by the TEE Gateway |
 | `reservedThroughput` | Capacity reserved for the Buyer during the window |
 | `rateLimits` | RPM, TPM, concurrency, burst, and request-size limits |
 | `allowedUse` | Allowed modalities, tools, regions, and use restrictions |
-| `pricing` | Reservation fee, metered rates, and overage behavior |
-| `sla` | Availability, latency, provider-error, refund, and penalty rules |
+| `pricing` | Fixed ticket price, paid in full by the Buyer at match |
+| `sla` | Minimum availability threshold used to determine settlement — see [Settlement](#settlement) |
 | `evidencePolicy` | Receipt contents, checkpoint cadence, retention, and dispute disclosure rules |
 | `policyHash` | Hash of the complete canonical ticket policy |
 | `approvedMeasurements` | TEE code measurements accepted by both parties |
 
-`maxCost` is required even when a ticket also specifies token allowances. Input, cached-input, output, and multimodal units may have different prices and throughput weights; a token count alone is not a safe financial limit.
+`maxCost`, `usageAllowance`, `reservedThroughput`, and `rateLimits` are enforcement ceilings, not billing inputs: the TEE Gateway rejects a request that would exceed any of them (`quota_exhausted`, `policy_rejected`) rather than letting it through and charging extra. Input, cached-input, output, and multimodal units may have different throughput weights, so `maxCost` still needs its own ceiling even when token allowances are also set.
 
 ### Pricing model
 
-The preferred contract separates capacity reservation from actual use:
+TokenSwap sells a fixed-price capacity cap, not metered usage:
 
 ```text
-Maximum Escrow = Reservation Fee + Maximum Usage Charge
+Ticket Price = Seller's listed fixed price
 
 Seller Payment =
-  Reservation Fee x Availability Factor
-  + Verified Usage Charge
-  - SLA Credits
+  Ticket Price, if the availability criterion is met
+  0,            if it is not met
 ```
 
-- The Reservation Fee compensates the Seller for holding capacity available, even if the Buyer does not use it.
-- The Usage Charge is calculated only from verified receipts.
-- Unused Usage Escrow is refunded.
-- Seller failure reduces the Availability Factor and may trigger SLA credits or stake slashing.
+- The Buyer pays the full Ticket Price at match. There is no per-unit usage charge and no refund for capacity the Buyer did not use.
+- The Buyer cannot cancel after match; the price is fixed and disclosed before acceptance, so there is nothing to renegotiate mid-window.
+- Usage receipts and checkpoints are not billing inputs — they exist to prove the Buyer stayed within the enforced caps and to evidence whether the Seller actually kept capacity available, which is what settlement is based on (see [Settlement](#settlement)).
 - Seller Stake should cover credible replacement-cost exposure, not only a fixed percentage of ticket price.
 
 ## TEE Attestation and Credential Provisioning
@@ -405,18 +404,28 @@ TEE attestation proves that approved code issued the invocation and receipt unde
 
 ## Settlement
 
+TokenSwap tickets carry exactly **one** Acceptance Criterion, authored by the protocol rather than by either party — a Buyer-negotiated or Seller-authored criterion would put one side in a position to grade its own performance:
+
+> The Seller maintained the ticket's committed capacity availability during the service window.
+
+This single criterion is evaluated automatically from the final receipt's `availability` value against the ticket's `sla` threshold:
+
+- **`met`** — final `availability` ≥ the ticket's `sla` threshold, with no unresolved `indeterminate` calls and no denial pattern attributable to the Seller (credential never provisioned, readiness receipt never signed, excess `gateway_unavailable`/`provider_error`).
+- **`not met`** — the threshold was missed for reasons attributable to the Seller.
+- **`unclear`** — the evidence is inconclusive (e.g. conflicting attestation or provider records); resolved through the Backup Agent / dispute-resolver path in [Verification and Disputes](#verification-and-disputes).
+
+Because there is exactly one criterion, [Working Contract settlement](/core-concepts/working_contracts#acceptance-criteria) collapses to a binary outcome — a ticket is either `fully-met` (full Ticket Price paid to the Seller) or `none-met` (full refund to the Buyer) — `partially-met` cannot occur. An `unclear` result defaults to `fully-met` under the same all-`unclear` rule as any other Working Contract, unless the Buyer disputes and Backup Agents resolve it to `not met`.
+
 At ticket close:
 
 1. The TEE submits the final receipt and evidence root.
-2. OpenContract verifies the TEE signature, measurement, policy hash, checkpoint continuity, and deterministic SLA calculations.
+2. OpenContract verifies the TEE signature, measurement, policy hash, checkpoint continuity, and the final `availability` value against the ticket's `sla` threshold.
 3. The Buyer approves or enters the optimistic review window.
-4. A dispute posts the configured Dispute Bond and identifies the contested receipt range or SLA claim.
-5. Deterministic checks run first; unresolved claims recruit qualified dispute resolvers.
-6. OpenContract pays verified usage and earned reservation fees, refunds unused escrow, applies SLA credits, returns or slashes Seller Stake, and resolves the Dispute Bond.
+4. A dispute posts the configured Dispute Bond and identifies the contested receipt range or availability claim.
+5. Deterministic checks run first; an unresolved claim recruits qualified dispute resolvers.
+6. OpenContract pays the full Ticket Price to the Seller and returns Seller Stake (`fully-met`), or refunds the Buyer in full and slashes Seller Stake (`none-met`), and resolves the Dispute Bond per [Working Contract settlement](/core-concepts/working_contracts#settlement).
 
-TokenSwap may report `fully_met`, `partially_met`, or `none_met` for compatibility with Working Contract outcomes, but the payout amount comes from usage-capacity settlement rules rather than an unweighted count of acceptance criteria. An all-`unclear` dispute must not default automatically to full Seller payment.
-
-## Protection and Verification Matrix
+## Trust Model
 
 TokenSwap uses several complementary controls. **Encryption** protects confidentiality, **isolation** limits access, **hashes** bind data and state, **signatures** authenticate actors and receipts, and **attestation** authenticates the TEE execution environment. No single control proves that the complete system is correct.
 
@@ -433,29 +442,12 @@ TokenSwap uses several complementary controls. **Encryption** protects confident
 | Separate execution evidence from money | TEE produces evidence; OpenContract holds escrow and applies committed settlement rules | The execution environment cannot directly transfer contract funds or settle its own claim | OpenContract custody and settlement implementation must still operate correctly | Isolate funds per ticket, verify payouts, and roll out automation gradually |
 | Verify the requested model path | Attested endpoint/model allowlist, provider metadata, request ID, dedicated deployment, and billing reconciliation | Approved code requested the allowed model through the committed provider path | It does not prove which model weights the Provider executed internally | Reconcile dedicated deployments and disclose this residual trust explicitly |
 
-## Trust Model
+### Residual risks not covered above
 
-### Properties TokenSwap targets
-
-- The Buyer never receives the Seller credential.
-- The Seller does not receive Buyer prompt plaintext from the Gateway.
-- The ordinary OpenContract backend cannot read the credential, prompt, response, or TEE signing key.
-- The Buyer cannot create billable usage without signing a request.
-- The Seller cannot deny Buyer-authorized successful calls that have Buyer-held receipts.
-- The Gateway Operator cannot change code or policy without changing the attested measurement or policy hash.
-- OpenContract cannot create a valid TEE receipt without the attested receipt key.
-- Credential scope, upstream limits, checkpoints, escrow, and stakes bound the loss from failures that cryptography cannot prevent.
-
-### Residual trust and failure modes
-
-TEE execution does not prevent:
-
-- the Gateway Operator from stopping the machine or blocking its network;
-- hardware, firmware, side-channel, or attestation-service failures;
-- bugs in approved Gateway code or provider adapters;
-- the Seller revoking a credential during the service window;
-- the upstream provider misreporting or internally changing a model;
-- policy-compliant but harmful or illegal requests.
+- The Gateway Operator can still stop the machine or block its network even with correct, attested code running.
+- Attestation-service failures, and hardware, firmware, or side-channel vulnerabilities, are outside what a valid measurement can rule out.
+- A policy-compliant request can still be harmful or illegal; attestation verifies code and policy, not legality or intent.
+- OpenContract cannot create a valid TEE receipt without the attested receipt key, and credential scope, upstream limits, checkpoints, escrow, and stakes bound the loss from every failure mode above that cryptography alone cannot prevent.
 
 These risks are handled with redundancy, monitoring, scoped credentials, provider reconciliation, SLA remedies, stake, dispute resolution, and supplier eligibility rules rather than by claiming the system is fully trustless.
 

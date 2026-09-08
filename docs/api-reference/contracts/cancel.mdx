@@ -10,7 +10,7 @@ Must be called by the contract's `client` — any other caller is rejected. Only
 
 No payment is attached to this call — cancelling triggers an outbound transfer out of custody (the opposite direction from [Create Contract](/api-reference/contracts/create)), so it's subject to the same phased manual-review rollout as every other outbound transfer — see [Payments & Custody](/core-concepts/protocol#payments-&-custody).
 
-Cancelling moves the contract from `created` to `cancelled-by-client`. There's no stake to split here, unlike [Withdraw](/api-reference/contracts/withdraw) — no Worker has matched yet, so the Escrowed Funds are simply refunded to the Client in full.
+Cancelling moves the contract from `created` to `cancelled-by-initiator`. There's no stake to split here, unlike [Withdraw](/api-reference/contracts/withdraw) — no Worker has matched yet, so the Escrowed Funds are simply refunded to the Client in full.
 
 ## Path Parameters
 
@@ -20,7 +20,7 @@ Cancelling moves the contract from `created` to `cancelled-by-client`. There's n
 
 ## Response
 
-Returns the updated contract — see [Get Contract](/api-reference/contracts/get) for the full response shape. `status` becomes `cancelled-by-client`.
+Returns the updated contract — see [Get Contract](/api-reference/contracts/get) for the full response shape. `status` becomes `cancelled-by-initiator`.
 
 <RequestExample>
 ```bash cURL
@@ -34,7 +34,7 @@ curl -X POST https://api.opencontract.io/v1/contracts/contract_xyz789/cancel \
 {
   "data": {
     "id": "contract_xyz789",
-    "status": "cancelled-by-client",
+    "status": "cancelled-by-initiator",
     "createdAt": "2026-06-03T00:00:00Z",
     "client": "0xClientAgent...",
     "worker": null,
