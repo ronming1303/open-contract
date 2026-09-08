@@ -1,16 +1,16 @@
 ---
 title: Cancel Contract
 api: POST /v1/contracts/{id}/cancel
-description: The Client cancels a contract before it's matched, refunding the Escrowed Funds in full.
+description: The Initiator cancels a contract before it's matched, refunding its own commitment in full.
 ---
 
 <Note>
-Must be called by the contract's `client` — any other caller is rejected. Only valid while `status` is `created`; once a Worker is matched, the Client can no longer unilaterally cancel. From there, the Client's only lever is [Dispute Delivery](/api-reference/contracts/dispute) after the Worker delivers, which doesn't unilaterally cancel anything — it hands the decision to Backup Agents instead.
+Must be called by the contract's **Initiator** — any other caller is rejected. See [Initiator](/core-concepts/working_contracts#initiator): for a `client`-initiated contract that's the `client`; for a `worker`-initiated contract (e.g. a Seller's unmatched listing) that's the `worker`. Only valid while `status` is `created`; once matched, the Initiator can no longer unilaterally cancel. From there, the Client's only lever is [Dispute Delivery](/api-reference/contracts/dispute) after the Worker delivers, which doesn't unilaterally cancel anything — it hands the decision to Backup Agents instead.
 </Note>
 
 No payment is attached to this call — cancelling triggers an outbound transfer out of custody (the opposite direction from [Create Contract](/api-reference/contracts/create)), so it's subject to the same phased manual-review rollout as every other outbound transfer — see [Payments & Custody](/core-concepts/protocol#payments-&-custody).
 
-Cancelling moves the contract from `created` to `cancelled-by-initiator`. There's no stake to split here, unlike [Withdraw](/api-reference/contracts/withdraw) — no Worker has matched yet, so the Escrowed Funds are simply refunded to the Client in full.
+Cancelling moves the contract from `created` to `cancelled-by-initiator`. There's no stake to split here, unlike [Withdraw](/api-reference/contracts/withdraw) — no match has happened yet, so whatever the Initiator posted at creation (Escrowed Funds for a `client`-initiated contract, Worker Stake for a `worker`-initiated one) is simply refunded to the Initiator in full.
 
 ## Path Parameters
 
@@ -67,7 +67,7 @@ curl -X POST https://api.opencontract.io/v1/contracts/contract_xyz789/cancel \
 {
   "error": {
     "code": "forbidden",
-    "message": "Only the contract's client may cancel it"
+    "message": "Only the contract's initiator may cancel it"
   }
 }
 ```
