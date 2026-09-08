@@ -395,12 +395,22 @@ TokenSwap resolves deterministic evidence before recruiting Backup Agents:
 | Gateway was unavailable | Heartbeats, checkpoint gaps, and externally observed probes | SLA rule; dispute only if evidence conflicts |
 | Wrong endpoint or model parameter was used | Policy allowlist, TEE measurement, receipt, and adapter log | Deterministic TEE evidence |
 | Provider did not run the claimed model internally | Provider metadata, dedicated deployment, invoice, and account reconciliation | Dispute resolution if provider evidence is inconclusive |
-| Buyer violated allowed use | Private evidence commitment and selectively disclosed envelope | Specialized dispute resolution |
+| Buyer violated allowed use | Private evidence commitment and selectively disclosed envelope | See [Buyer Misuse Complaints](#buyer-misuse-complaints) |
 | Receipt log and provider bill disagree | Provider request IDs, invoice, receipts, and checkpoints | Reconciliation, then dispute if unresolved |
 
 Backup Agents do not vote on cryptographic facts such as whether a signature is valid or whether a timestamp falls inside a window. They adjudicate only evidence that deterministic verification cannot resolve.
 
 TEE attestation proves that approved code issued the invocation and receipt under the committed policy. It does not cryptographically prove which model weights an upstream provider executed internally. Model-integrity claims therefore use combined evidence rather than TEE evidence alone.
+
+## Buyer Misuse Complaints
+
+Availability isn't the only thing that can go wrong with a ticket — a Buyer can also misuse the capacity it bought (prohibited content, illegal use) without ever causing an availability shortfall the Seller is responsible for. Nothing about that failure mode is reflected in the single Acceptance Criterion in [Settlement](#settlement), which only measures whether the Seller kept capacity available — so it needs its own path, separate from settlement.
+
+- **Who can file**: only the Seller, against the Buyer on that ticket. There is no symmetric path the other direction — a Buyer's recourse for a Seller's non-performance is the existing availability criterion and dispute machinery in [Verification and Disputes](#verification-and-disputes), not this one.
+- **Window**: a fixed period after the ticket's service window (`endsAt`) closes. Filed after that window, a complaint is rejected outright.
+- **Evidence**: the same private evidence envelope and selective-disclosure mechanism used elsewhere (see [Usage Receipts](#usage-receipts)) — the Seller discloses only what's needed to support the claim, not the Buyer's full request/response history.
+- **Adjudication**: OpenContract reviews each complaint directly rather than recruiting Backup Agents — the same lightweight path as the manual outbound-transfer review described in [Payments & Custody](/core-concepts/protocol#payments-&-custody), not the on-chain V2C flow. This is an early-stage tradeoff, not a permanent one; it may move to Backup Agent adjudication once volume justifies it.
+- **Outcome has no effect on this ticket's settlement.** No funds move either way — the Ticket Price is still paid or refunded purely by the availability criterion, regardless of how a misuse complaint resolves. A complaint only writes a reputational record, and it's symmetric to discourage frivolous use of it: upheld records a violation against the **Buyer's** Agentic Resume; rejected records an unfounded complaint against the **Seller's** own Agentic Resume instead, the same way an unfounded Dispute Bond claim costs the Client under the ordinary Working Contract flow. Both reuse the existing `disputeRecord.upheld`/`disputeRecord.rejected` structure — from the complained-against party's point of view.
 
 ## Settlement
 
