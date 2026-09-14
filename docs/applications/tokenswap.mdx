@@ -27,6 +27,86 @@ TokenSwap uses OpenContract for commitments, money, disputes, and settlement. Ac
 In TokenSwap, **usage tokens** are model input, cached-input, and output units. They are unrelated to any future OpenContract protocol or governance token.
 </Note>
 
+## End-to-End Flow
+
+A single view of the whole lifecycle — listing, credential provisioning, the per-call loop, periodic checkpoints, and settlement — with where encryption applies at each hop:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Seller
+    participant Buyer
+    participant TEE as TEE Gateway
+    participant Provider as Upstream Provider
+    participant Log as Evidence Log
+    participant OC as OpenContract
+
+    Note over Seller,OC: Listing and match
+    Seller->>OC: Create ticket, worker-initiated, post Worker Stake
+    Buyer->>OC: Accept, lock Escrowed Funds at the full price
+
+    Note over Seller,TEE: Credential provisioning, once
+    TEE->>TEE: Generate ephemeral keys, boot approved code
+    TEE->>Seller: Attestation, measurement, and policy hash
+    Seller->>Seller: Verify attestation, measurement, and policy hash
+    Seller->>TEE: Encrypted Provider credential, only the TEE can decrypt it
+
+    Note over Buyer,Log: Every call, loops N times
+    loop each call
+        Buyer->>TEE: Signed request with nonce, timestamp, and ticket ID
+        TEE->>TEE: Verify signature, nonce, window, and quota
+        TEE->>Provider: Invoke using the Seller's credential, which never leaves the TEE
+        Provider->>TEE: Raw response
+        TEE->>TEE: Split the response into Part 1 content and Part 2 metadata
+        TEE->>Buyer: Plaintext response and signed receipt, in real time
+        TEE->>Log: Flush Part 1, encrypted to the Buyer's key only
+        TEE->>Log: Flush Part 2, unencrypted status and metadata
+    end
+
+    Note over TEE,OC: Periodic checkpoint, not every call
+    opt count, time, or value threshold reached
+        TEE->>OC: Submit checkpoint with sequence range, merkleRoot, teeSignature, and cumulative counts
+        OC->>OC: Verify the sequence is gapless, append one history row
+    end
+
+    Note over TEE,OC: Window close
+    TEE->>TEE: Destroy the credential, sign the Final Receipt
+    TEE->>OC: Submit Delivery, status moves from matched to under-review
+
+    Note over OC: Automatic evaluation, design only, not yet implemented
+    OC->>OC: Read every checkpoint for this contract
+    OC->>OC: Sum the failures attributable to the Seller per the fault table
+    OC->>OC: Compute availability as success over success plus seller failures
+    OC->>OC: Compare availability to the ticket's sla, write criteriaMet
+
+    Note over Buyer,OC: Review window, unchanged from a generic Working Contract
+    OC->>Buyer: criteriaMet already computed, nothing subjective to review
+    Buyer->>OC: Approve early, dispute, or take no action before the Review Deadline
+
+    alt fully met
+        OC->>Seller: Full Ticket Price and returned Stake
+    else none met
+        OC->>Buyer: Full refund
+        OC->>OC: Slash Stake
+    end
+```
+
+| Hop | Encrypted? | Key |
+|---|---|---|
+| Seller → TEE (credential) | Yes | TEE's attested public key |
+| Buyer → TEE (request) | Yes, session-level | TEE's session key |
+| TEE → Provider | TLS, terminates inside the TEE | Provider's own certificate |
+| TEE → Buyer (response) | Yes in transit; Buyer decrypts | Session key |
+| TEE → evidence log, Part 1 (content) | **Yes** | **Buyer's key only** |
+| TEE → evidence log, Part 2 (metadata) | **No** | — |
+| TEE → OC, checkpoint | **No** (hashes and counts, no content) | — |
+
+Three storage locations, three different contents:
+
+- **Encrypted evidence log** — every call's full record (Part 1 ciphertext + Part 2 plaintext), decoupled from the TEE's own compute instance and from OpenContract's database. See [Evidence Storage and Checkpointing](#evidence-storage-and-checkpointing).
+- **OpenContract's Postgres** — contract state (`WorkingContract`) and checkpoint history (`ContractCheckpoint`) — hashes and aggregate counts, never content.
+- **Buyer** — its own real-time copy of every response and signed receipt, independent of both of the above.
+
 ## Why TokenSwap Uses OpenContract
 
 A conventional API proxy can route requests and collect payment, but it does not create a neutral, auditable agreement between a capacity Buyer and Seller. TokenSwap applies OpenContract's service-contract primitives to continuous machine-delivered work:
@@ -368,7 +448,7 @@ At expiry or exhaustion, the TEE revokes or deletes the credential and signs the
 }
 ```
 
-The final receipt is the TokenSwap equivalent of a Working Contract delivery. The Buyer may approve it or dispute before the Review Deadline; silence may resolve optimistically according to the ticket policy.
+The final receipt is the TokenSwap equivalent of a Working Contract delivery. Unlike a generic delivery, `criteriaMet` is written automatically the instant the final receipt lands — see [Settlement](#settlement) — so there's nothing subjective left for the Buyer to review. The Buyer may still approve early or dispute before the Review Deadline; if the deadline passes with no action, the ticket resolves to that already-computed outcome rather than a blind default.
 
 ## Evidence Chain
 
@@ -450,8 +530,8 @@ Because there is exactly one criterion, [Working Contract settlement](/core-conc
 At ticket close:
 
 1. The TEE submits the final receipt and evidence root.
-2. OpenContract verifies the TEE signature, measurement, policy hash, checkpoint continuity, and the final `availability` value against the ticket's `sla` threshold.
-3. The Buyer approves or enters the optimistic review window.
+2. OpenContract verifies the TEE signature, measurement, policy hash, and checkpoint continuity, then computes `availability` from the checkpoint history and writes `criteriaMet` immediately — no Buyer action is needed to produce this result.
+3. The Buyer may approve early, dispute, or take no action before the Review Deadline. On silence, the ticket resolves to the already-computed outcome from step 2, not a blind default.
 4. A dispute posts the configured Dispute Bond and identifies the contested receipt range or availability claim.
 5. Deterministic checks run first; an unresolved claim recruits qualified dispute resolvers.
 6. OpenContract pays the full Ticket Price to the Seller and returns Seller Stake (`fully-met`), or refunds the Buyer in full and slashes Seller Stake (`none-met`), and resolves the Dispute Bond per [Working Contract settlement](/core-concepts/working_contracts#settlement).
