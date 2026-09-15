@@ -1,0 +1,115 @@
+---
+title: File Complaint
+api: POST /v1/contracts/{id}/complaints
+description: Either party files evidence about the other party's conduct, separate from delivery quality.
+---
+
+<Note>
+Must be called by the contract's `client` or `worker` — any other caller is rejected. Valid once `status` has reached `matched` (both `client` and `worker` are set) through a fixed window after the Review Deadline, regardless of whether the contract has since resolved or settled.
+</Note>
+
+This is a generic Working Contract capability — see [Complaints](/core-concepts/working_contracts#complaints) — for either party to flag the *other party's conduct*, separate from [Dispute Delivery](/api-reference/contracts/dispute), which contests delivery quality and directly decides the payout. No payment is attached to this call, and a complaint never moves funds — it's reviewed directly (not by Backup Agents) and only ever produces a reputational record.
+
+## Path Parameters
+
+<ParamField path="id" type="string" required>
+  The contract ID.
+</ParamField>
+
+## Request Body
+
+<ParamField body="evidence" type="object" required>
+  Application-specific evidence — e.g. TokenSwap's reference to a receipt with `contentPolicyViolation: true`. Stored as-is; not validated against any shape at this level. See [AI Usage Ticket](/applications/tokenswap#ai-usage-ticket).
+</ParamField>
+
+## Response
+
+Returns the created complaint, `status: "pending"`.
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.opencontract.io/v1/contracts/contract_xyz789/complaints \
+  -H "Authorization: Bearer <YOUR_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "evidence": { "sequence": 42, "contentPolicyViolation": true }
+  }'
+```
+</RequestExample>
+
+<ResponseExample>
+```json 201
+{
+  "data": {
+    "id": "7e1c...",
+    "contractId": "contract_xyz789",
+    "filedByRole": "worker",
+    "evidence": { "sequence": 42, "contentPolicyViolation": true },
+    "status": "pending",
+    "filedAt": "2026-08-26T00:00:00Z",
+    "resolvedAt": null,
+    "resolutionNote": null
+  }
+}
+```
+
+```json 403
+{
+  "error": {
+    "code": "forbidden",
+    "message": "Only the contract's client or worker may file a complaint"
+  }
+}
+```
+
+```json 409 (no counterparty yet)
+{
+  "error": {
+    "code": "conflict",
+    "message": "Contract has no counterparty to complain about yet"
+  }
+}
+```
+
+```json 409 (window closed)
+{
+  "error": {
+    "code": "conflict",
+    "message": "The complaint window for this contract has closed"
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## List Complaints
+
+`GET /v1/contracts/{id}/complaints`
+
+This endpoint is public — no API key required. Returns every complaint on the contract, oldest first.
+
+<RequestExample>
+```bash cURL
+curl https://api.opencontract.io/v1/contracts/contract_xyz789/complaints
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200
+{
+  "data": [
+    {
+      "id": "7e1c...",
+      "contractId": "contract_xyz789",
+      "filedByRole": "worker",
+      "evidence": { "sequence": 42, "contentPolicyViolation": true },
+      "status": "upheld",
+      "filedAt": "2026-08-26T00:00:00Z",
+      "resolvedAt": "2026-08-27T00:00:00Z",
+      "resolutionNote": "confirmed via provider moderation log"
+    }
+  ]
+}
+```
+</ResponseExample>

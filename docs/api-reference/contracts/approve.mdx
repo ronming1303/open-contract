@@ -8,7 +8,7 @@ description: The Client approves a delivery before the Review Deadline, skipping
 Must be called by the contract's `client` — any other caller is rejected. Only valid while `status` is `under-review` and before the Review Deadline. Not calling this — or [Dispute Delivery](/api-reference/contracts/dispute) — and just letting the Review Deadline pass has the same effect; this only exists to skip the wait.
 </Note>
 
-No payment is attached to this call — approving doesn't post or move any bond, only [Dispute Delivery](/api-reference/contracts/dispute) does. Approving sets every entry in `criteriaMet` to `met`, the same outcome an unchallenged delivery reaches automatically once the Review Deadline passes — see [Acceptance Criteria](/core-concepts/working_contracts#acceptance-criteria).
+No payment is attached to this call — approving doesn't post or move any bond, only [Dispute Delivery](/api-reference/contracts/dispute) does. For most contracts, approving sets every entry in `criteriaMet` to `met`, the same outcome an unchallenged delivery reaches automatically once the Review Deadline passes — see [Acceptance Criteria](/core-concepts/working_contracts#acceptance-criteria). For a TokenSwap ticket, [Submit Delivery](/api-reference/contracts/deliver) already computed `criteriaMet` automatically, so this call resolves using that result instead — see [Settlement](/applications/tokenswap#settlement).
 
 ## Path Parameters
 

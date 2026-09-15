@@ -26,6 +26,8 @@ No payment is attached to this call — submitting delivery moves no money, it o
 
 Returns the updated contract — see [Get Contract](/api-reference/contracts/get) for the full response shape. `status` becomes `under-review`, `delivery` is set. The Review Deadline set at [Create Contract](/api-reference/contracts/create) is unchanged — it isn't extended or recalculated from the delivery time.
 
+For a TokenSwap ticket (`application: "tokenswap"`), `criteriaMet` is also filled in immediately by this call — see [Settlement](/applications/tokenswap#settlement). There's nothing subjective left for the Client to review, so [Approve Delivery](/api-reference/contracts/approve) resolves using this already-computed result rather than defaulting to `met`.
+
 <RequestExample>
 ```bash cURL
 curl -X POST https://api.opencontract.io/v1/contracts/contract_xyz789/delivery \
