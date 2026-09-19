@@ -220,7 +220,7 @@ The fields below are TokenSwap-specific and don't fit the generic schema — the
 | `gatewayOperator` | Selected Gateway Operator identity |
 | `gatewayType` | `platform`, `seller_hosted`, or `tee` |
 | `provider` | Upstream provider or approved provider class |
-| `allowedModels` | Exact model/deployment allowlist |
+| `allowedModels` | Exact model/deployment allowlist. Required and non-empty: the TEE Gateway rejects any request naming a model outside it as `policy_rejected` before it reaches the Provider, so the Buyer's mistake isn't recorded as a Provider failure against the Seller |
 | `startsAt`, `endsAt` | Inclusive service window boundaries — distinct from the Working Contract's own deadlines, which govern matching and delivery, not when the Buyer may actually consume capacity. Validated at Create Contract time against those deadlines: `startsAt` must not be before `matchDeadline` and `endsAt` must not be after `deliveryDeadline`, so the window can never open before matching could possibly have happened or stay open past the point delivery is due — at the cost of the Buyer possibly waiting for the window to open if matched early |
 | `maxCost` | Hard ceiling on upstream cost the TEE Gateway will let the Buyer consume; enforced as a cap, not billed per unit |
 | `usageAllowance` | Optional input, cached-input, output, image, audio, or other unit caps enforced by the TEE Gateway |
