@@ -73,7 +73,7 @@ sequenceDiagram
     TEE->>TEE: Destroy the credential, sign the Final Receipt
     TEE->>OC: Submit Delivery, status moves from matched to under-review
 
-    Note over OC: Automatic evaluation, design only, not yet implemented
+    Note over OC: Automatic evaluation at Submit Delivery
     OC->>OC: Read every checkpoint for this contract
     OC->>OC: Sum the failures attributable to the Seller per the fault table
     OC->>OC: Compute availability as success over success plus seller failures
@@ -260,9 +260,9 @@ Every claim in this page ultimately rests on who holds which key and what crosse
 
 | Key / credential | Type | Purpose | Custody |
 |---|---|---|---|
-| Identity key | Long-term, the Buyer's existing Ethereum key | Signs the API Key challenge, x402 payment authorization, and the Buyer-TEE handshake; also the seed the archival decryption key is derived from | Never leaves the Buyer |
+| Identity key | Long-term, the Buyer's existing Ethereum key | Signs the API Key challenge, x402 payment authorization, and the Buyer-TEE handshake (which also binds the archival public key, below); also the seed the archival decryption key is derived from | Never leaves the Buyer |
 | API Key | Bearer token issued by OpenContract | Authenticates the Buyer's own calls to the OpenContract platform API (e.g. Accept Ticket) | Held by the Buyer only — never given to the TEE Gateway |
-| Archival decryption key | Long-term X25519, derived deterministically from the identity key | Decrypts the Buyer's own Part 1 evidence envelope (see [Private evidence envelope](#private-evidence-envelope)) | Private half never leaves the Buyer; public half is registered with the ticket out of band for the TEE to encrypt against |
+| Archival decryption key | Long-term X25519, derived deterministically from the identity key | Decrypts the Buyer's own Part 1 evidence envelope (see [Private evidence envelope](#private-evidence-envelope)) | Private half never leaves the Buyer; the public half is bound into the Buyer's signed handshake message, so the TEE encrypts the archive to it and nobody on the path can swap in a different key |
 | Session handshake key | Ephemeral X25519, generated fresh for each ticket's service window | Paired with the TEE's session handshake key via ECDH to derive the key that encrypts live request/response traffic during the window | Discarded when the service window closes |
 
 ```mermaid
@@ -301,7 +301,7 @@ sequenceDiagram
 
 ### OpenContract
 
-OpenContract issues Bearer API Keys to the Buyer and Seller after verifying a one-time signature from each party's identity key, and stores the public halves that need out-of-band registration on the ticket — the TEE's signing public key and the Buyer's archival decryption public key. It never receives any party's private key, the Provider credential, or Part 1 plaintext.
+OpenContract issues Bearer API Keys to the Buyer and Seller after verifying a one-time signature from each party's identity key, and stores the TEE's signing public key on the ticket so Buyer and Seller can verify the TEE's signatures. It never receives any party's private key, the Provider credential, or Part 1 plaintext.
 
 ## TEE Attestation and Credential Provisioning
 
@@ -566,7 +566,7 @@ TokenSwap tickets carry exactly **one** Acceptance Criterion, authored by the pr
 
 > The Seller maintained the ticket's committed capacity availability during the service window.
 
-This single criterion is evaluated automatically from the final receipt's `availability` value against the ticket's `sla` threshold. `availability` itself is computed with a **three-way fault split**, not a Buyer-or-Seller binary — see the fault column in [Request Lifecycle](#request-lifecycle):
+This single criterion is evaluated automatically at Submit Delivery: OpenContract computes `availability` from the ticket's checkpoint history and compares it against the ticket's `sla` threshold, rather than trusting an `availability` figure the Seller or Gateway reports. `availability` itself is computed with a **three-way fault split**, not a Buyer-or-Seller binary — see the fault column in [Request Lifecycle](#request-lifecycle):
 
 ```text
 availability = successful_calls / (successful_calls + seller_attributable_failures)
@@ -583,7 +583,7 @@ Because there is exactly one criterion, [Working Contract settlement](/core-conc
 At ticket close:
 
 1. The TEE submits the final receipt and evidence root.
-2. OpenContract verifies the TEE signature, measurement, policy hash, and checkpoint continuity, then computes `availability` from the checkpoint history and writes `criteriaMet` immediately — no Buyer action is needed to produce this result.
+2. OpenContract computes `availability` from the checkpoint history it has already accepted and writes `criteriaMet` immediately — no Buyer action is needed to produce this result. Each checkpoint was checked for gapless continuity when it was submitted; verifying its TEE signature, measurement, and policy hash arrives with real attestation (see [Periodic checkpoint](#periodic-checkpoint)).
 3. The Buyer may approve early, dispute, or take no action before the Review Deadline. On silence, the ticket resolves to the already-computed outcome from step 2, not a blind default.
 4. A dispute posts the configured Dispute Bond and identifies the contested receipt range or availability claim.
 5. Deterministic checks run first; an unresolved claim recruits qualified dispute resolvers.
@@ -632,6 +632,30 @@ The first test may use one Buyer and one Seller, one provider adapter, test-valu
 - exercise approval, a simulated dispute, and settlement.
 
 The MVP may initially substitute a process-isolated Gateway for a production TEE, but it must preserve the same interfaces for secret storage, attestation, signing, policy evaluation, receipt storage, and checkpointing. Its trust assumptions must be disclosed as `gatewayType: platform`.
+
+### Current prototype status
+
+The rest of this page describes the target design. The process-isolated Gateway that exists today implements a subset of it, and differs from it in the ways below. All of it has been exercised end to end against a testnet ticket.
+
+**Implemented**
+
+- Ticket creation, with policy validation: `allowedModels` must be non-empty, and the service window must sit inside the ticket's own deadlines (see [Ticket policy](#ticket-policy-application-metadata)).
+- The Seller-TEE provisioning handshake and the Buyer-TEE session handshake, each an ephemeral key exchange endorsed by the initiating party's identity key; `sellerApiKey` and the Provider credential are delivered only through the former, and the Buyer's archival public key is bound into the latter's signed message (see [Key Inventory](#key-inventory)).
+- Enforcement of the service window, nonce replay, the model allowlist, the output-token `usageAllowance`, and credential presence, each producing a signed denial receipt with the fault attribution above.
+- A hash-chained receipt log with Part 1 encrypted to the Buyer's archival key, periodic checkpoints carrying per-status counts, a Final Receipt submitted through Submit Delivery, and automatic settlement from the checkpoint history.
+- Destroying the credential, `sellerApiKey`, and session key once the Final Receipt is submitted; the Gateway then refuses further calls.
+
+**Not yet implemented, or different from the design**
+
+- **No attestation or hardware isolation.** `teeMeasurement` is a fixed placeholder and the Gateway's signing key is generated fresh per ticket rather than persisted, which is why the trust assumption is disclosed as `gatewayType: platform`.
+- **No per-request Buyer signature.** A request is authenticated by the handshake and the session key, which proves to the Gateway that the Buyer sent it but not to a third party. Receipts therefore carry no `buyerRequestSignature`, and the [Verification and Disputes](#verification-and-disputes) row on unauthorized requests cannot be resolved by signature verification yet. In this phase that rests on trusting the operator; with attested, reproducibly built Gateway code it stops depending on that trust.
+- **Only some policy is enforced.** `rateLimits`, `maxCost`, `reservedThroughput`, and `allowedUse` are not, so `buyer_rate_limited` and `provider_rate_limited` are never produced.
+- **A mock Provider.** There is no real upstream call, so `provider_error` and `provider_rate_limited` cannot arise from a real Provider.
+- **A reduced receipt.** Fields such as `policyHash`, `providerRequestId`, timestamps, cached-input tokens, cost, and quota before and after are not recorded.
+- **No crash-safe metering.** There is no durable `call_intent`, `indeterminate` recovery, or `maxUncheckpointedExposure` pause.
+- **A local evidence log.** Receipts are appended to a local file standing in for the external durable storage described in [Evidence Storage and Checkpointing](#evidence-storage-and-checkpointing).
+- **Calls are in-process.** The Gateway is a library called directly, not yet a separate network service.
+- **`sellerApiKey` is not scoped.** It is the Seller's ordinary platform key rather than one limited to this ticket's checkpoint and delivery endpoints.
 
 ### TEE-Ledger
 
